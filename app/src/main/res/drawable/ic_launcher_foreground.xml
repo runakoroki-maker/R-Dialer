@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer accent call ring -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#38BDF8"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M34,74 C26,62 27,44 38,34 C49,24 67,25 76,36" />
+    
+    <!-- Bold R Geometry (Safe zone ~26 to 82) -->
+    <!-- Left vertical bar of R with rounded caps -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M37,32 H45 C46.1,32 47,32.9 47,34 V72 C47,73.1 46.1,74 45,74 H37 C35.9,74 35,73.1 35,72 V34 C35,32.9 35.9,32 37,32 Z" />
+
+    <!-- Top loop of R -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M45,32 H58 C66.5,32 72,37.5 72,45.5 C72,53.5 66.5,59 58,59 H45 V32 Z M47,40 V51 H57 C61.5,51 64.5,48.5 64.5,45.5 C64.5,42.5 61.5,40 57,40 Z" />
+
+    <!-- Diagonal leg of R (dynamic angled stroke) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,54 H63 L74.5,72.5 C75.2,73.6 74.4,74 73,74 H64.5 C63.6,74 62.8,73.5 62.3,72.7 L52.5,57.5 Z" />
+
+    <!-- Vibrant call indicator badge (bottom right) -->
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M76,68m-8,0a8,8 0 1,1 16,0a8,8 0 1,1 -16,0" />
+
+    <!-- Tiny white phone handset inside call badge -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M74.2,65.2 C73.9,64.9 73.5,64.9 73.2,65.2 L72.3,66.1 C72.1,66.3 72.1,66.6 72.2,66.8 C72.7,67.8 73.5,68.8 74.5,69.5 C74.7,69.6 75.0,69.6 75.2,69.4 L76.1,68.5 C76.4,68.2 76.4,67.8 76.1,67.5 L75.3,66.7 C75.1,66.5 74.7,66.5 74.5,66.7 L74.2,67.0 C73.9,66.7 73.6,66.3 73.3,66.0 L73.6,65.7 C73.8,65.5 73.8,65.1 73.6,64.9 Z" />
+</vector>

@@ -1,0 +1,6 @@
+{
+  "name": "R Dialer",
+  "description": "A clean, functional Android phone and dialer application with Telecom framework integration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
