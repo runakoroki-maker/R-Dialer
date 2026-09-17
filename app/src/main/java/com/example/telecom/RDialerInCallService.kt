@@ -1,10 +1,12 @@
 package com.example.telecom
 
+import android.app.KeyguardManager
 import android.content.Intent
 import android.telecom.Call
 import android.telecom.CallAudioState
 import android.telecom.InCallService
 import com.example.ui.call.InCallActivity
+import com.example.ui.call.IncomingCallPopupActivity
 
 class RDialerInCallService : InCallService() {
 
@@ -28,6 +30,7 @@ class RDialerInCallService : InCallService() {
         CallNotificationManager.cancelCallNotification(applicationContext)
     }
 
+    @Deprecated("Deprecated in Java")
     override fun onCallAudioStateChanged(audioState: CallAudioState?) {
         super.onCallAudioStateChanged(audioState)
         CallManager.onAudioStateChanged(audioState)
@@ -36,17 +39,33 @@ class RDialerInCallService : InCallService() {
     private fun handleCallState(call: Call, state: Int) {
         when (state) {
             Call.STATE_RINGING -> {
-                // Incoming call: Post high-priority Heads-Up Notification with full-screen intent.
-                // This respects multitasking so if user is on YouTube/Chrome, a banner appears
-                // without force-stopping their current task.
                 val currentState = CallManager.callState.value
                 if (currentState != null) {
                     CallNotificationManager.showIncomingCallNotification(applicationContext, currentState)
                 }
+
+                val keyguardManager = getSystemService(KeyguardManager::class.java)
+                val isLocked = keyguardManager?.isKeyguardLocked == true
+
+                if (isLocked) {
+                    // Locked device: Present full-screen incoming call UI
+                    val intent = Intent(this, InCallActivity::class.java).apply {
+                        action = InCallActivity.ACTION_IN_CALL
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    }
+                    startActivity(intent)
+                } else {
+                    // Unlocked device (using another app like YouTube, Chrome, or on Home):
+                    // Launch compact Samsung-style floating incoming call popup
+                    val popupIntent = Intent(this, IncomingCallPopupActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    }
+                    startActivity(popupIntent)
+                }
             }
             Call.STATE_DIALING, Call.STATE_CONNECTING -> {
-                // Outgoing call: Open in-call activity directly
                 val intent = Intent(this, InCallActivity::class.java).apply {
+                    action = InCallActivity.ACTION_IN_CALL
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 }
                 startActivity(intent)

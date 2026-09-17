@@ -44,24 +44,35 @@ object CallManager {
         inCallService = service
         call.registerCallback(callCallback)
 
+        val rawNumber = extractPhoneNumber(call)
+        val isIncoming = call.state == Call.STATE_RINGING
+
+        // Immediately set state synchronously so caller UI and notification have data instantly
+        _callState.value = ActiveCallState(
+            number = rawNumber,
+            contactName = null,
+            photoUri = null,
+            telecomState = call.state,
+            isIncoming = isIncoming,
+            durationSeconds = 0L,
+            isMuted = service.callAudioState?.isMuted == true,
+            isSpeakerOn = service.callAudioState?.route == CallAudioState.ROUTE_SPEAKER
+        )
+
         // Resolve contact info asynchronously
         scope.launch {
-            val rawNumber = extractPhoneNumber(call)
             val contact = ContactRepository(context).findContactByNumber(rawNumber)
-            val isIncoming = call.state == Call.STATE_RINGING
-
-            _callState.value = ActiveCallState(
-                number = rawNumber,
-                contactName = contact?.displayName,
-                photoUri = contact?.photoUri,
-                telecomState = call.state,
-                isIncoming = isIncoming,
-                durationSeconds = 0L,
-                isMuted = service.callAudioState?.isMuted == true,
-                isSpeakerOn = service.callAudioState?.route == CallAudioState.ROUTE_SPEAKER
-            )
-
-            updateCallState(call)
+            val current = _callState.value
+            if (current != null && activeCall == call) {
+                val updated = current.copy(
+                    contactName = contact?.displayName,
+                    photoUri = contact?.photoUri
+                )
+                _callState.value = updated
+                if (call.state == Call.STATE_RINGING) {
+                    CallNotificationManager.showIncomingCallNotification(context, updated)
+                }
+            }
         }
     }
 
@@ -141,7 +152,15 @@ object CallManager {
     }
 
     fun disconnect() {
-        activeCall?.disconnect()
+        if (activeCall?.state == Call.STATE_RINGING) {
+            try {
+                activeCall?.reject(false, null)
+            } catch (e: Exception) {
+                activeCall?.disconnect()
+            }
+        } else {
+            activeCall?.disconnect()
+        }
     }
 
     fun toggleMute() {

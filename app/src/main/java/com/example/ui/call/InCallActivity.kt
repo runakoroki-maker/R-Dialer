@@ -1,13 +1,13 @@
 package com.example.ui.call
 
 import android.app.KeyguardManager
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.lifecycleScope
 import com.example.telecom.CallManager
 import com.example.ui.theme.MyApplicationTheme
@@ -20,11 +20,15 @@ class InCallActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         configureLockscreenFlags()
+        handleIntent(intent)
 
-        // Automatically finish when call is removed/disconnected
+        // Automatically finish when call ends or is removed
         lifecycleScope.launch {
+            var hasSeenCall = CallManager.callState.value != null
             CallManager.callState.collectLatest { state ->
-                if (state == null) {
+                if (state != null) {
+                    hasSeenCall = true
+                } else if (hasSeenCall) {
                     finishAndRemoveTask()
                 }
             }
@@ -38,6 +42,18 @@ class InCallActivity : ComponentActivity() {
                     }
                 )
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        if (intent?.action == ACTION_ANSWER_CALL) {
+            CallManager.answer()
         }
     }
 
@@ -56,5 +72,10 @@ class InCallActivity : ComponentActivity() {
                         WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
             )
         }
+    }
+
+    companion object {
+        const val ACTION_IN_CALL = "com.example.ui.call.ACTION_IN_CALL"
+        const val ACTION_ANSWER_CALL = "com.example.ui.call.ACTION_ANSWER_CALL"
     }
 }

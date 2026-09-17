@@ -12,8 +12,12 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import android.telecom.Call
+import com.example.ui.components.IncomingCallCard
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -249,9 +253,40 @@ fun MainAppScreen(
             // App Identity Header
             AppHeader(activeTab = currentTab)
 
-            // Active in-call return banner if call is currently active in background
+            // Incoming Call Popup if incoming call arrives while user is inside R Dialer
             AnimatedVisibility(
-                visible = activeCallState != null,
+                visible = activeCallState != null && activeCallState?.telecomState == Call.STATE_RINGING,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                activeCallState?.let { call ->
+                    IncomingCallCard(
+                        callState = call,
+                        onAnswer = {
+                            CallManager.answer()
+                            val intent = Intent(context, InCallActivity::class.java).apply {
+                                action = InCallActivity.ACTION_IN_CALL
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                            }
+                            context.startActivity(intent)
+                        },
+                        onDecline = {
+                            CallManager.disconnect()
+                        },
+                        onOpenFullScreen = {
+                            val intent = Intent(context, InCallActivity::class.java).apply {
+                                action = InCallActivity.ACTION_IN_CALL
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                            }
+                            context.startActivity(intent)
+                        }
+                    )
+                }
+            }
+
+            // Active in-call return banner if call is currently active/connected in background
+            AnimatedVisibility(
+                visible = activeCallState != null && activeCallState?.telecomState != Call.STATE_RINGING,
                 enter = fadeIn(),
                 exit = fadeOut()
             ) {
@@ -262,6 +297,7 @@ fun MainAppScreen(
                             .padding(horizontal = 16.dp, vertical = 6.dp)
                             .clickable {
                                 val intent = Intent(context, InCallActivity::class.java).apply {
+                                    action = InCallActivity.ACTION_IN_CALL
                                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
                                 }
                                 context.startActivity(intent)

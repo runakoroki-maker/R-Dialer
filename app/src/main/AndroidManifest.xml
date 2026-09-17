@@ -76,6 +76,16 @@
             android:turnScreenOn="true"
             android:theme="@style/Theme.MyApplication" />
 
+        <!-- Compact Incoming Call Popup (Floating dialog for multitasking) -->
+        <activity
+            android:name=".ui.call.IncomingCallPopupActivity"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.RDialer.IncomingCallPopup" />
+
         <!-- Telecom InCallService implementation -->
         <service
             android:name=".telecom.RDialerInCallService"

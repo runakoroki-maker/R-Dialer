@@ -17,18 +17,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeMute
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
-import androidx.compose.material.icons.filled.VolumeMute
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,6 +51,7 @@ import com.example.telecom.CallManager
 import com.example.telecom.TelecomHelper
 import com.example.ui.components.ContactAvatar
 import com.example.ui.components.DialerKeypad
+import kotlinx.coroutines.delay
 
 @Composable
 fun InCallScreen(
@@ -59,14 +62,27 @@ fun InCallScreen(
     var showInCallKeypad by remember { mutableStateOf(false) }
 
     if (callState == null) {
-        // No active call, dismiss screen
-        onCallFinished()
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(Color(0xFF0F172A)),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(color = Color(0xFF38BDF8))
+        }
         return
     }
 
     val state = callState!!
     val isIncoming = state.telecomState == Call.STATE_RINGING
     val isDisconnected = state.telecomState == Call.STATE_DISCONNECTED
+
+    LaunchedEffect(isDisconnected) {
+        if (isDisconnected) {
+            delay(1200)
+            onCallFinished()
+        }
+    }
 
     val statusText = when (state.telecomState) {
         Call.STATE_RINGING -> "Incoming Call..."
@@ -221,7 +237,7 @@ fun InCallScreen(
                         )
 
                         InCallActionButton(
-                            icon = if (state.isSpeakerOn) Icons.Default.VolumeUp else Icons.Default.VolumeMute,
+                            icon = if (state.isSpeakerOn) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeMute,
                             label = if (state.isSpeakerOn) "Earpiece" else "Speaker",
                             backgroundColor = if (state.isSpeakerOn) Color(0xFF2563EB) else Color(0xFF334155),
                             iconColor = Color.White,

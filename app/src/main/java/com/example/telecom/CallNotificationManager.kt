@@ -9,7 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import com.example.MainActivity
+import androidx.core.app.Person
 import com.example.R
 import com.example.data.models.ActiveCallState
 import com.example.ui.call.InCallActivity
@@ -19,11 +19,15 @@ class CallActionReceiver : BroadcastReceiver() {
         when (intent.action) {
             ACTION_ANSWER -> {
                 CallManager.answer()
-                // Launch call activity
                 val inCallIntent = Intent(context, InCallActivity::class.java).apply {
+                    action = InCallActivity.ACTION_IN_CALL
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 }
-                context.startActivity(inCallIntent)
+                try {
+                    context.startActivity(inCallIntent)
+                } catch (e: Exception) {
+                    // Ignore background activity launch restriction if any
+                }
             }
             ACTION_DECLINE -> {
                 CallManager.disconnect()
@@ -78,7 +82,8 @@ object CallNotificationManager {
         createNotificationChannels(context)
 
         val fullScreenIntent = Intent(context, InCallActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            action = InCallActivity.ACTION_IN_CALL
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         val fullScreenPendingIntent = PendingIntent.getActivity(
             context,
@@ -87,18 +92,19 @@ object CallNotificationManager {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Answer Action
-        val answerIntent = Intent(context, CallActionReceiver::class.java).apply {
-            action = CallActionReceiver.ACTION_ANSWER
+        // Real Answer Action: Direct Activity PendingIntent
+        val answerIntent = Intent(context, InCallActivity::class.java).apply {
+            action = InCallActivity.ACTION_ANSWER_CALL
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
-        val answerPendingIntent = PendingIntent.getBroadcast(
+        val answerPendingIntent = PendingIntent.getActivity(
             context,
             1,
             answerIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Decline Action
+        // Decline Action: Rejects call through Telecom
         val declineIntent = Intent(context, CallActionReceiver::class.java).apply {
             action = CallActionReceiver.ACTION_DECLINE
         }
@@ -109,15 +115,29 @@ object CallNotificationManager {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val callerPerson = Person.Builder()
+            .setName(state.displayTitle)
+            .setUri(if (state.number.isNotBlank()) "tel:${state.number}" else null)
+            .setImportant(true)
+            .build()
+
+        val callStyle = NotificationCompat.CallStyle.forIncomingCall(
+            callerPerson,
+            declinePendingIntent,
+            answerPendingIntent
+        )
+
         val notification = NotificationCompat.Builder(context, CHANNEL_INCOMING_CALLS)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(state.displayTitle)
-            .setContentText("Incoming Call • ${state.number}")
+            .setContentText(if (state.contactName != null) state.number else "Incoming Call")
+            .setStyle(callStyle)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .setAutoCancel(false)
+            .setContentIntent(fullScreenPendingIntent)
             .setFullScreenIntent(fullScreenPendingIntent, true)
             .addAction(android.R.drawable.sym_action_call, "Answer", answerPendingIntent)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Decline", declinePendingIntent)
@@ -131,6 +151,7 @@ object CallNotificationManager {
         createNotificationChannels(context)
 
         val contentIntent = Intent(context, InCallActivity::class.java).apply {
+            action = InCallActivity.ACTION_IN_CALL
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         val contentPendingIntent = PendingIntent.getActivity(
