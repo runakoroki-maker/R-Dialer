@@ -39,6 +39,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -75,12 +76,22 @@ import com.example.ui.dialer.DialerScreen
 import com.example.ui.dialer.DialerViewModel
 import com.example.ui.recents.RecentsScreen
 import com.example.ui.recents.RecentsViewModel
+import com.example.ui.recordings.RecordingsScreen
 import com.example.ui.theme.MyApplicationTheme
+
+import androidx.compose.foundation.border
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.IconButton
+import com.example.ui.components.DeviceEnvironmentDialog
+import com.example.ui.components.EmulatorLoginDetectedDialog
+import com.example.util.EmulatorDetector
 
 enum class DialerNavTab(val title: String) {
     DIALER("Dialer"),
     RECENTS("Recents"),
-    CONTACTS("Contacts")
+    CONTACTS("Contacts"),
+    RECORDINGS("Recordings")
 }
 
 class MainActivity : ComponentActivity() {
@@ -91,6 +102,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        EmulatorDetector.refresh(this)
         enableEdgeToEdge()
 
         CallNotificationManager.createNotificationChannels(this)
@@ -105,6 +117,11 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        EmulatorDetector.refresh(this)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -133,6 +150,30 @@ fun MainAppScreen(
 ) {
     val context = LocalContext.current
     var currentTab by remember { mutableStateOf(DialerNavTab.DIALER) }
+
+    val environmentInfo by EmulatorDetector.environmentInfo.collectAsState()
+    var hasDismissedEmulatorDialog by remember { mutableStateOf(false) }
+    var showDiagnosticsDialog by remember { mutableStateOf(false) }
+
+    if (environmentInfo.isEmulator && !hasDismissedEmulatorDialog) {
+        EmulatorLoginDetectedDialog(
+            onDismiss = { hasDismissedEmulatorDialog = true },
+            onViewDiagnostics = {
+                hasDismissedEmulatorDialog = true
+                showDiagnosticsDialog = true
+            }
+        )
+    }
+
+    if (showDiagnosticsDialog) {
+        DeviceEnvironmentDialog(
+            environmentInfo = environmentInfo,
+            onDismiss = { showDiagnosticsDialog = false },
+            onSimulateIncomingCall = {
+                CallManager.simulateDemoIncomingCall(context)
+            }
+        )
+    }
 
     // Active ongoing call observation for floating status banner
     val activeCallState by CallManager.callState.collectAsState()
@@ -241,6 +282,29 @@ fun MainAppScreen(
                     ),
                     modifier = Modifier.testTag("nav_tab_contacts")
                 )
+
+                NavigationBarItem(
+                    selected = currentTab == DialerNavTab.RECORDINGS,
+                    onClick = {
+                        currentTab = DialerNavTab.RECORDINGS
+                    },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.Mic,
+                            contentDescription = "Recordings",
+                            modifier = Modifier.size(24.dp)
+                        )
+                    },
+                    label = { Text("Recordings", fontSize = 12.sp, fontWeight = FontWeight.Medium) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = Color(0xFF2563EB),
+                        selectedTextColor = Color(0xFF2563EB),
+                        indicatorColor = Color(0xFFDBEAFE),
+                        unselectedIconColor = Color(0xFF64748B),
+                        unselectedTextColor = Color(0xFF64748B)
+                    ),
+                    modifier = Modifier.testTag("nav_tab_recordings")
+                )
             }
         }
     ) { innerPadding ->
@@ -251,7 +315,59 @@ fun MainAppScreen(
                 .statusBarsPadding()
         ) {
             // App Identity Header
-            AppHeader(activeTab = currentTab)
+            AppHeader(
+                activeTab = currentTab,
+                isEmulator = environmentInfo.isEmulator,
+                onOpenDiagnostics = { showDiagnosticsDialog = true }
+            )
+
+            // Persistent Demo Mode indicator bar if in emulator
+            AnimatedVisibility(
+                visible = environmentInfo.isEmulator,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFFFFFBEB))
+                        .border(1.dp, Color(0xFFFDE68A), RoundedCornerShape(10.dp))
+                        .clickable { showDiagnosticsDialog = true }
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                        .testTag("demo_mode_emulator_indicator")
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = Color(0xFFD97706),
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "DEMO MODE — Emulator",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFB45309),
+                                letterSpacing = 0.3.sp
+                            )
+                        }
+                        Text(
+                            text = "Diagnostics",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF2563EB)
+                        )
+                    }
+                }
+            }
 
             // Incoming Call Popup if incoming call arrives while user is inside R Dialer
             AnimatedVisibility(
@@ -381,6 +497,14 @@ fun MainAppScreen(
                             }
                         )
                     }
+                    DialerNavTab.RECORDINGS -> {
+                        RecordingsScreen(
+                            onCallClick = { number ->
+                                dialerViewModel.setNumber(number)
+                                currentTab = DialerNavTab.DIALER
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -390,7 +514,9 @@ fun MainAppScreen(
 @Composable
 fun AppHeader(
     activeTab: DialerNavTab,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isEmulator: Boolean = false,
+    onOpenDiagnostics: () -> Unit = {}
 ) {
     Row(
         modifier = modifier
@@ -432,6 +558,48 @@ fun AppHeader(
                     fontSize = 11.sp,
                     color = Color(0xFF64748B),
                     fontWeight = FontWeight.Medium
+                )
+            }
+        }
+
+        // Right side: Emulator badge or Diagnostics info button
+        if (isEmulator) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFFFEF3C7))
+                    .border(1.dp, Color(0xFFFDE68A), RoundedCornerShape(8.dp))
+                    .clickable(onClick = onOpenDiagnostics)
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .testTag("emulator_header_badge")
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = "Emulator Mode Active",
+                        tint = Color(0xFFD97706),
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "EMULATOR",
+                        color = Color(0xFF92400E),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp
+                    )
+                }
+            }
+        } else {
+            IconButton(
+                onClick = onOpenDiagnostics,
+                modifier = Modifier.size(32.dp).testTag("device_diagnostics_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = "Device Environment",
+                    tint = Color(0xFF64748B),
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }

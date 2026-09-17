@@ -37,14 +37,23 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.models.ActiveCallState
 
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import com.example.util.EmulatorDetector
+
 @Composable
 fun IncomingCallCard(
     callState: ActiveCallState,
     onAnswer: () -> Unit,
     onDecline: () -> Unit,
     onOpenFullScreen: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isDemoModeOverride: Boolean? = null
 ) {
+    val environmentInfo by EmulatorDetector.environmentInfo.collectAsState()
+    val isDemoMode = isDemoModeOverride ?: environmentInfo.isEmulator
+
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -66,21 +75,57 @@ fun IncomingCallCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF10B981))
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Incoming Call",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF64748B),
-                        letterSpacing = 0.5.sp
-                    )
+                if (isDemoMode) {
+                    Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFFFEF3C7))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                                .testTag("demo_incoming_call_badge")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = Color(0xFFD97706),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "DEMO INCOMING CALL",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFB45309),
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                        Text(
+                            text = "EMULATOR",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFD97706),
+                            letterSpacing = 1.sp,
+                            modifier = Modifier.padding(start = 2.dp, top = 2.dp)
+                        )
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF10B981))
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Incoming Call",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF64748B),
+                            letterSpacing = 0.5.sp
+                        )
+                    }
                 }
 
                 Row(
@@ -114,7 +159,7 @@ fun IncomingCallCard(
                 photoUri = callState.photoUri,
                 displayName = callState.contactName,
                 initial = callState.initial,
-                size = 64.dp
+                size = 68.dp
             )
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -122,7 +167,7 @@ fun IncomingCallCard(
             // Caller Identity: Name or Phone number
             Text(
                 text = callState.displayTitle,
-                fontSize = 19.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF0F172A),
                 textAlign = TextAlign.Center,
@@ -149,7 +194,25 @@ fun IncomingCallCard(
                 )
             }
 
-            Spacer(modifier = Modifier.height(22.dp))
+            // SIM badge if available
+            if (!callState.simLabel.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFEFF6FF))
+                        .padding(horizontal = 10.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = callState.simLabel,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF2563EB)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
 
             // Action Buttons: 🔴 Decline & 🟢 Answer
             Row(

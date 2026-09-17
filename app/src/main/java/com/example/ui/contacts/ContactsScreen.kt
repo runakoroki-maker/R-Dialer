@@ -24,26 +24,35 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,6 +68,7 @@ import com.example.data.models.ContactItem
 import com.example.telecom.TelecomHelper
 import com.example.ui.components.ContactAvatar
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContactsScreen(
     viewModel: ContactsViewModel,
@@ -67,6 +77,12 @@ fun ContactsScreen(
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
+
+    var showAddSheet by remember { mutableStateOf(false) }
+    var selectedDetailContact by remember { mutableStateOf<ContactItem?>(null) }
+
+    val addSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val detailSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -78,136 +94,214 @@ fun ContactsScreen(
         viewModel.checkPermissionAndLoad()
     }
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
             .background(Color.White)
-            .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        // Search bar
-        OutlinedTextField(
-            value = uiState.searchQuery,
-            onValueChange = { viewModel.onSearchQueryChanged(it) },
-            placeholder = { Text("Search contacts...", color = Color(0xFF94A3B8), fontSize = 14.sp) },
-            leadingIcon = {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = "Search",
-                    tint = Color(0xFF64748B)
-                )
-            },
-            trailingIcon = {
-                if (uiState.searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { viewModel.onSearchQueryChanged("") }) {
-                        Icon(
-                            imageVector = Icons.Default.Clear,
-                            contentDescription = "Clear",
-                            tint = Color(0xFF64748B)
-                        )
-                    }
-                }
-            },
-            singleLine = true,
-            shape = RoundedCornerShape(16.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Color(0xFF2563EB),
-                unfocusedBorderColor = Color(0xFFE2E8F0),
-                focusedContainerColor = Color(0xFFF8FAFC),
-                unfocusedContainerColor = Color(0xFFF8FAFC)
-            ),
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp)
-                .testTag("contacts_search_field")
-        )
-
-        // Content area based on permission and loading state
-        when {
-            !uiState.hasPermission -> {
-                PermissionDeniedCard(
-                    title = "Contacts permission is required to display your contacts.",
-                    onGrantClick = {
-                        permissionLauncher.launch(Manifest.permission.READ_CONTACTS)
-                    },
-                    onSettingsClick = {
-                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                            data = Uri.fromParts("package", context.packageName, null)
-                        }
-                        context.startActivity(intent)
-                    }
-                )
-            }
-            uiState.isLoading -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = Color(0xFF2563EB))
-                }
-            }
-            uiState.contacts.isEmpty() -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Default.Contacts,
-                            contentDescription = null,
-                            tint = Color(0xFF94A3B8),
-                            modifier = Modifier.size(56.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = if (uiState.searchQuery.isNotEmpty()) "No contacts matching \"${uiState.searchQuery}\"" else "No contacts found on device",
-                            color = Color(0xFF64748B),
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
-            else -> {
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            // Top Header: Title & Add Contact Button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
                 Text(
-                    text = "${uiState.contacts.size} contacts",
-                    color = Color(0xFF64748B),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp)
+                    text = "Contacts",
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0F172A)
                 )
 
-                LazyColumn(
+                IconButton(
+                    onClick = { showAddSheet = true },
                     modifier = Modifier
-                        .fillMaxSize()
-                        .testTag("contacts_list")
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFEFF6FF))
+                        .testTag("add_contact_button")
                 ) {
-                    items(
-                        items = uiState.contacts,
-                        key = { it.id.toString() + it.phoneNumber }
-                    ) { contact ->
-                        ContactRow(
-                            contact = contact,
-                            onClick = {
-                                TelecomHelper.placeCall(context, contact.phoneNumber)
-                            },
-                            onCallClick = {
-                                TelecomHelper.placeCall(context, contact.phoneNumber)
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Add Contact",
+                        tint = Color(0xFF2563EB),
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
+            // Search bar
+            OutlinedTextField(
+                value = uiState.searchQuery,
+                onValueChange = { viewModel.onSearchQueryChanged(it) },
+                placeholder = { Text("Search contacts...", color = Color(0xFF94A3B8), fontSize = 14.sp) },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = Color(0xFF64748B)
+                    )
+                },
+                trailingIcon = {
+                    if (uiState.searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.onSearchQueryChanged("") }) {
+                            Icon(
+                                imageVector = Icons.Default.Clear,
+                                contentDescription = "Clear",
+                                tint = Color(0xFF64748B)
+                            )
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(16.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color(0xFF2563EB),
+                    unfocusedBorderColor = Color(0xFFE2E8F0),
+                    focusedContainerColor = Color(0xFFF8FAFC),
+                    unfocusedContainerColor = Color(0xFFF8FAFC)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp)
+                    .testTag("contacts_search_field")
+            )
+
+            // Content area based on permission and loading state
+            when {
+                !uiState.hasPermission -> {
+                    PermissionDeniedCard(
+                        title = "Contacts permission is required to display your contacts.",
+                        onGrantClick = {
+                            permissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+                        },
+                        onSettingsClick = {
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.fromParts("package", context.packageName, null)
                             }
-                        )
-                        HorizontalDivider(
-                            color = Color(0xFFF1F5F9),
-                            thickness = 1.dp,
-                            modifier = Modifier.padding(start = 68.dp)
-                        )
+                            context.startActivity(intent)
+                        }
+                    )
+                }
+                uiState.isLoading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = Color(0xFF2563EB))
+                    }
+                }
+                uiState.contacts.isEmpty() -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.Contacts,
+                                contentDescription = null,
+                                tint = Color(0xFF94A3B8),
+                                modifier = Modifier.size(56.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = if (uiState.searchQuery.isNotEmpty()) "No contacts matching \"${uiState.searchQuery}\"" else "No contacts found on device",
+                                color = Color(0xFF64748B),
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Button(
+                                onClick = { showAddSheet = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.PersonAdd, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Add First Contact")
+                            }
+                        }
+                    }
+                }
+                else -> {
+                    Text(
+                        text = "${uiState.contacts.size} contacts",
+                        color = Color(0xFF64748B),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp)
+                    )
+
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .testTag("contacts_list")
+                    ) {
+                        items(
+                            items = uiState.contacts,
+                            key = { it.id.toString() + it.phoneNumber }
+                        ) { contact ->
+                            ContactRow(
+                                contact = contact,
+                                onClick = {
+                                    selectedDetailContact = contact
+                                },
+                                onCallClick = {
+                                    TelecomHelper.placeCall(context, contact.phoneNumber)
+                                }
+                            )
+                            HorizontalDivider(
+                                color = Color(0xFFF1F5F9),
+                                thickness = 1.dp,
+                                modifier = Modifier.padding(start = 68.dp)
+                            )
+                        }
                     }
                 }
             }
         }
     }
+
+    // Add Contact Sheet Modal
+    if (showAddSheet) {
+        AddContactSheet(
+            sheetState = addSheetState,
+            onDismiss = { showAddSheet = false },
+            onContactSaved = { name, phone, business, address, photoBytes, onComplete, onError ->
+                viewModel.saveContact(
+                    name = name,
+                    phone = phone,
+                    businessName = business,
+                    address = address,
+                    photoBytes = photoBytes,
+                    onSuccess = onComplete,
+                    onError = onError
+                )
+            }
+        )
+    }
+
+    // Contact Detail Sheet Modal
+    selectedDetailContact?.let { contact ->
+        ContactDetailSheet(
+            contact = contact,
+            sheetState = detailSheetState,
+            onDismiss = { selectedDetailContact = null },
+            onCallClick = { num ->
+                TelecomHelper.placeCall(context, num)
+            }
+        )
+    }
 }
 
 @Composable
-fun ContactRow(
+private fun ContactRow(
     contact: ContactItem,
     onClick: () -> Unit,
     onCallClick: () -> Unit,
@@ -236,6 +330,29 @@ fun ContactRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+
+            // Business Name (Professional Contact Support)
+            if (!contact.businessName.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(1.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Business,
+                        contentDescription = null,
+                        tint = Color(0xFF2563EB),
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = contact.businessName,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF2563EB),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = contact.phoneNumber,

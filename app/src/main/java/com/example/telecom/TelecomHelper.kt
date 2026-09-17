@@ -59,7 +59,11 @@ object TelecomHelper {
         ) == PackageManager.PERMISSION_GRANTED
     }
 
-    fun placeCall(context: Context, rawNumber: String): Boolean {
+    fun placeCall(
+        context: Context,
+        rawNumber: String,
+        phoneAccountHandle: android.telecom.PhoneAccountHandle? = null
+    ): Boolean {
         val cleanNumber = rawNumber.trim()
         if (cleanNumber.isBlank()) return false
 
@@ -67,10 +71,16 @@ object TelecomHelper {
         val intent = if (hasCallPermission(context)) {
             Intent(Intent.ACTION_CALL, uri).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                if (phoneAccountHandle != null) {
+                    putExtra(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, phoneAccountHandle)
+                }
             }
         } else {
             Intent(Intent.ACTION_DIAL, uri).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                if (phoneAccountHandle != null) {
+                    putExtra(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, phoneAccountHandle)
+                }
             }
         }
 

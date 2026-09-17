@@ -13,6 +13,7 @@ import androidx.core.app.Person
 import com.example.R
 import com.example.data.models.ActiveCallState
 import com.example.ui.call.InCallActivity
+import com.example.util.EmulatorDetector
 
 class CallActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -80,6 +81,7 @@ object CallNotificationManager {
 
     fun showIncomingCallNotification(context: Context, state: ActiveCallState) {
         createNotificationChannels(context)
+        val isEmulator = EmulatorDetector.isEmulator()
 
         val fullScreenIntent = Intent(context, InCallActivity::class.java).apply {
             action = InCallActivity.ACTION_IN_CALL
@@ -116,7 +118,7 @@ object CallNotificationManager {
         )
 
         val callerPerson = Person.Builder()
-            .setName(state.displayTitle)
+            .setName(if (isEmulator) "[DEMO] ${state.displayTitle}" else state.displayTitle)
             .setUri(if (state.number.isNotBlank()) "tel:${state.number}" else null)
             .setImportant(true)
             .build()
@@ -127,10 +129,17 @@ object CallNotificationManager {
             answerPendingIntent
         )
 
+        val displayTitle = if (isEmulator) "[DEMO - EMULATOR] ${state.displayTitle}" else state.displayTitle
+        val contentText = if (isEmulator) {
+            "DEMO INCOMING CALL • ${if (state.contactName != null) state.number else "Simulated"}"
+        } else {
+            if (state.contactName != null) state.number else "Incoming Call"
+        }
+
         val notification = NotificationCompat.Builder(context, CHANNEL_INCOMING_CALLS)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle(state.displayTitle)
-            .setContentText(if (state.contactName != null) state.number else "Incoming Call")
+            .setContentTitle(displayTitle)
+            .setContentText(contentText)
             .setStyle(callStyle)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_CALL)
@@ -139,8 +148,6 @@ object CallNotificationManager {
             .setAutoCancel(false)
             .setContentIntent(fullScreenPendingIntent)
             .setFullScreenIntent(fullScreenPendingIntent, true)
-            .addAction(android.R.drawable.sym_action_call, "Answer", answerPendingIntent)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Decline", declinePendingIntent)
             .build()
 
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -149,6 +156,7 @@ object CallNotificationManager {
 
     fun showOngoingCallNotification(context: Context, state: ActiveCallState) {
         createNotificationChannels(context)
+        val isEmulator = EmulatorDetector.isEmulator()
 
         val contentIntent = Intent(context, InCallActivity::class.java).apply {
             action = InCallActivity.ACTION_IN_CALL
@@ -175,10 +183,24 @@ object CallNotificationManager {
         val durationSecs = state.durationSeconds % 60
         val timeFormatted = String.format("%02d:%02d", durationMinutes, durationSecs)
 
+        val isHeld = state.telecomState == android.telecom.Call.STATE_HOLDING
+        val displayTitle = when {
+            isHeld && isEmulator -> "[DEMO CALL - ON HOLD] ${state.displayTitle}"
+            isHeld -> "[ON HOLD] ${state.displayTitle}"
+            isEmulator -> "[DEMO CALL] ${state.displayTitle}"
+            else -> state.displayTitle
+        }
+        val contentText = when {
+            isHeld && isEmulator -> "Demo call on hold"
+            isHeld -> "Call on hold"
+            isEmulator -> "Demo call in progress • $timeFormatted"
+            else -> "Call in progress • $timeFormatted"
+        }
+
         val notification = NotificationCompat.Builder(context, CHANNEL_ONGOING_CALLS)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle(state.displayTitle)
-            .setContentText("Call in progress • $timeFormatted")
+            .setContentTitle(displayTitle)
+            .setContentText(contentText)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setOngoing(true)

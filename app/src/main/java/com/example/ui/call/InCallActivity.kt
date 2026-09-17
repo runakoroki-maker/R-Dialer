@@ -11,6 +11,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.lifecycleScope
 import com.example.telecom.CallManager
 import com.example.ui.theme.MyApplicationTheme
+import com.example.util.EmulatorDetector
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -18,6 +19,7 @@ class InCallActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        EmulatorDetector.refresh(this)
         enableEdgeToEdge()
         configureLockscreenFlags()
         handleIntent(intent)

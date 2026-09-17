@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -59,6 +60,10 @@ import com.example.telecom.TelecomHelper
 import com.example.ui.components.ContactAvatar
 import com.example.ui.components.DialerKeypad
 
+import androidx.compose.material.icons.filled.ArrowDropDown
+import com.example.telecom.SubscriptionHelper
+import com.example.ui.components.SimSelectionDialog
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun DialerScreen(
@@ -77,6 +82,28 @@ fun DialerScreen(
 
     LaunchedEffect(Unit) {
         viewModel.checkDefaultDialerStatus()
+        viewModel.refreshSimInfo()
+    }
+
+    if (uiState.isSimSelectionVisible) {
+        val currentPrefSim = when (uiState.preferredSimMode) {
+            SubscriptionHelper.PREF_SIM_1 -> 1
+            SubscriptionHelper.PREF_SIM_2 -> 2
+            else -> null
+        }
+        SimSelectionDialog(
+            simList = uiState.activeSims,
+            currentPreferredSim = currentPrefSim,
+            targetNumber = uiState.inputNumber,
+            onSimSelected = { sim, rememberChoice ->
+                viewModel.selectSimAndCall(sim, rememberChoice) { errorMsg ->
+                    Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onDismiss = {
+                viewModel.setSimSelectionVisible(false)
+            }
+        )
     }
 
     Column(
@@ -245,38 +272,69 @@ fun DialerScreen(
             // Left spacer for symmetry
             Box(modifier = Modifier.size(68.dp))
 
-            // Large vibrant emerald Call button
-            Box(
-                modifier = Modifier
-                    .size(68.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.linearGradient(
-                            listOf(Color(0xFF10B981), Color(0xFF059669))
+            // Center: Call button + Optional compact Dual-SIM selector
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(68.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(
+                                listOf(Color(0xFF10B981), Color(0xFF059669))
+                            )
                         )
-                    )
-                    .combinedClickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = ripple(bounded = true, color = Color.White),
-                        onClick = {
-                            if (!TelecomHelper.hasCallPermission(context)) {
-                                onRequestCallPermission()
-                            } else {
-                                viewModel.placeCall { errorMsg ->
-                                    Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
+                        .combinedClickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = ripple(bounded = true, color = Color.White),
+                            onClick = {
+                                if (!TelecomHelper.hasCallPermission(context)) {
+                                    onRequestCallPermission()
+                                } else {
+                                    viewModel.placeCall { errorMsg ->
+                                        Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             }
-                        }
+                        )
+                        .testTag("call_button"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Call,
+                        contentDescription = "Place Call",
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
                     )
-                    .testTag("call_button"),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Call,
-                    contentDescription = "Place Call",
-                    tint = Color.White,
-                    modifier = Modifier.size(32.dp)
-                )
+                }
+
+                if (uiState.activeSims.size >= 2) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFFEFF6FF))
+                            .clickable { viewModel.setSimSelectionVisible(true) }
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                            .testTag("dialer_sim_selector"),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = uiState.selectedSim?.label ?: "SIM 1",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF2563EB)
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = "Select SIM",
+                            tint = Color(0xFF2563EB),
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
             }
 
             // Backspace button (tap delete, long press clear all)

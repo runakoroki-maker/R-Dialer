@@ -63,6 +63,26 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun saveContact(
+        name: String,
+        phone: String,
+        businessName: String?,
+        address: String?,
+        photoBytes: ByteArray?,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val result = repository.saveContact(name, phone, businessName, address, photoBytes)
+            if (result.isSuccess) {
+                loadContacts(_uiState.value.searchQuery)
+                onSuccess()
+            } else {
+                onError(result.exceptionOrNull()?.message ?: "Failed to save contact")
+            }
+        }
+    }
+
     private fun loadContacts(query: String = _uiState.value.searchQuery) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)

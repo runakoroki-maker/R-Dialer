@@ -5,6 +5,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.ContactRepository
 import com.example.data.models.ContactItem
+import com.example.data.models.SimAccountInfo
+import com.example.telecom.SubscriptionHelper
 import com.example.telecom.TelecomHelper
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -17,7 +19,11 @@ data class DialerUiState(
     val inputNumber: String = "",
     val matchedContact: ContactItem? = null,
     val isDefaultDialer: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val activeSims: List<SimAccountInfo> = emptyList(),
+    val selectedSim: SimAccountInfo? = null,
+    val preferredSimMode: String = SubscriptionHelper.PREF_ALWAYS_ASK,
+    val isSimSelectionVisible: Boolean = false
 )
 
 class DialerViewModel(application: Application) : AndroidViewModel(application) {
@@ -30,11 +36,31 @@ class DialerViewModel(application: Application) : AndroidViewModel(application) 
 
     init {
         checkDefaultDialerStatus()
+        refreshSimInfo()
     }
 
     fun checkDefaultDialerStatus() {
         val isDefault = TelecomHelper.isDefaultDialer(getApplication())
         _uiState.value = _uiState.value.copy(isDefaultDialer = isDefault)
+    }
+
+    fun refreshSimInfo() {
+        val sims = SubscriptionHelper.getActiveSubscriptions(getApplication())
+        val prefMode = SubscriptionHelper.getPreferredSimMode(getApplication())
+        val selected = when (prefMode) {
+            SubscriptionHelper.PREF_SIM_1 -> sims.firstOrNull { it.simNumber == 1 }
+            SubscriptionHelper.PREF_SIM_2 -> sims.firstOrNull { it.simNumber == 2 }
+            else -> sims.firstOrNull()
+        }
+        _uiState.value = _uiState.value.copy(
+            activeSims = sims,
+            selectedSim = selected,
+            preferredSimMode = prefMode
+        )
+    }
+
+    fun setSimSelectionVisible(visible: Boolean) {
+        _uiState.value = _uiState.value.copy(isSimSelectionVisible = visible)
     }
 
     fun appendDigit(digit: String) {
@@ -76,7 +102,7 @@ class DialerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun placeCall(onFailure: (String) -> Unit) {
+    fun onCallInitiated(onFailure: (String) -> Unit) {
         val number = _uiState.value.inputNumber.trim()
         if (number.isBlank()) {
             _uiState.value = _uiState.value.copy(errorMessage = "Please enter a valid phone number.")
@@ -84,7 +110,61 @@ class DialerViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
 
-        val success = TelecomHelper.placeCall(getApplication(), number)
+        refreshSimInfo()
+        val sims = _uiState.value.activeSims
+
+        if (sims.size >= 2) {
+            val prefMode = _uiState.value.preferredSimMode
+            when (prefMode) {
+                SubscriptionHelper.PREF_SIM_1 -> {
+                    val sim1 = sims.firstOrNull { it.simNumber == 1 }
+                    placeCallWithSim(sim1, onFailure)
+                }
+                SubscriptionHelper.PREF_SIM_2 -> {
+                    val sim2 = sims.firstOrNull { it.simNumber == 2 }
+                    placeCallWithSim(sim2, onFailure)
+                }
+                else -> {
+                    // Always ask mode -> show dialog
+                    _uiState.value = _uiState.value.copy(isSimSelectionVisible = true)
+                }
+            }
+        } else {
+            // Single SIM or device fallback
+            placeCallWithSim(null, onFailure)
+        }
+    }
+
+    fun selectSimAndCall(sim: SimAccountInfo, rememberChoice: Boolean, onFailure: (String) -> Unit) {
+        _uiState.value = _uiState.value.copy(
+            isSimSelectionVisible = false,
+            selectedSim = sim
+        )
+        if (rememberChoice) {
+            val newMode = if (sim.simNumber == 1) SubscriptionHelper.PREF_SIM_1 else SubscriptionHelper.PREF_SIM_2
+            SubscriptionHelper.setPreferredSimMode(getApplication(), newMode)
+            _uiState.value = _uiState.value.copy(preferredSimMode = newMode)
+        }
+        placeCallWithSim(sim, onFailure)
+    }
+
+    fun placeCall(onFailure: (String) -> Unit) {
+        onCallInitiated(onFailure)
+    }
+
+    private fun placeCallWithSim(sim: SimAccountInfo?, onFailure: (String) -> Unit) {
+        val number = _uiState.value.inputNumber.trim()
+        if (number.isBlank()) {
+            _uiState.value = _uiState.value.copy(errorMessage = "Please enter a valid phone number.")
+            onFailure("Please enter a valid phone number.")
+            return
+        }
+
+        val handle = if (sim != null) {
+            SubscriptionHelper.getPhoneAccountHandleForSubscription(getApplication(), sim.subscriptionId)
+        } else null
+
+        val success = TelecomHelper.placeCall(getApplication(), number, handle)
         if (!success) {
             _uiState.value = _uiState.value.copy(errorMessage = "Unable to initiate call on this device.")
             onFailure("Unable to initiate call on this device.")
