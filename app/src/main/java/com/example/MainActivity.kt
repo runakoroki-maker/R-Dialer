@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -41,14 +42,24 @@ import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -69,23 +80,28 @@ import androidx.compose.ui.unit.sp
 import com.example.telecom.CallManager
 import com.example.telecom.CallNotificationManager
 import com.example.telecom.TelecomHelper
+import com.example.ui.account.AccountScreen
 import com.example.ui.call.InCallActivity
 import com.example.ui.contacts.ContactsScreen
 import com.example.ui.contacts.ContactsViewModel
 import com.example.ui.dialer.DialerScreen
 import com.example.ui.dialer.DialerViewModel
+import com.example.ui.privacy.PrivacyPolicyScreen
 import com.example.ui.recents.RecentsScreen
 import com.example.ui.recents.RecentsViewModel
 import com.example.ui.recordings.RecordingsScreen
 import com.example.ui.theme.MyApplicationTheme
 
 import androidx.compose.foundation.border
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.IconButton
 import com.example.ui.components.DeviceEnvironmentDialog
 import com.example.ui.components.EmulatorLoginDetectedDialog
 import com.example.util.EmulatorDetector
+
+enum class SubScreen {
+    ACCOUNT,
+    PRIVACY_POLICY
+}
 
 enum class DialerNavTab(val title: String) {
     DIALER("Dialer"),
@@ -150,6 +166,23 @@ fun MainAppScreen(
 ) {
     val context = LocalContext.current
     var currentTab by remember { mutableStateOf(DialerNavTab.DIALER) }
+
+    var activeSubScreen by remember { mutableStateOf<SubScreen?>(null) }
+    var showAboutDialog by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = activeSubScreen != null) {
+        activeSubScreen = null
+    }
+
+    if (activeSubScreen == SubScreen.ACCOUNT) {
+        AccountScreen(onBack = { activeSubScreen = null })
+        return
+    }
+
+    if (activeSubScreen == SubScreen.PRIVACY_POLICY) {
+        PrivacyPolicyScreen(onBack = { activeSubScreen = null })
+        return
+    }
 
     val environmentInfo by EmulatorDetector.environmentInfo.collectAsState()
     var hasDismissedEmulatorDialog by remember { mutableStateOf(false) }
@@ -318,6 +351,9 @@ fun MainAppScreen(
             AppHeader(
                 activeTab = currentTab,
                 isEmulator = environmentInfo.isEmulator,
+                onOpenAccount = { activeSubScreen = SubScreen.ACCOUNT },
+                onOpenPrivacy = { activeSubScreen = SubScreen.PRIVACY_POLICY },
+                onOpenAbout = { showAboutDialog = true },
                 onOpenDiagnostics = { showDiagnosticsDialog = true }
             )
 
@@ -509,6 +545,71 @@ fun MainAppScreen(
             }
         }
     }
+
+    if (showAboutDialog) {
+        AlertDialog(
+            onDismissRequest = { showAboutDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(Color(0xFF1E3A8A), Color(0xFF2563EB))
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "R",
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "R Dialer",
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0F172A),
+                        fontSize = 18.sp
+                    )
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Modern calling, made simple.",
+                        fontSize = 14.sp,
+                        color = Color(0xFF334155)
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Text(
+                        text = "Version ${BuildConfig.VERSION_NAME}",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF2563EB)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "© R Dialer",
+                        fontSize = 12.sp,
+                        color = Color(0xFF94A3B8)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { showAboutDialog = false },
+                    modifier = Modifier.testTag("about_dialog_close")
+                ) {
+                    Text("Close", color = Color(0xFF2563EB), fontWeight = FontWeight.SemiBold)
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -516,8 +617,13 @@ fun AppHeader(
     activeTab: DialerNavTab,
     modifier: Modifier = Modifier,
     isEmulator: Boolean = false,
+    onOpenAccount: () -> Unit = {},
+    onOpenPrivacy: () -> Unit = {},
+    onOpenAbout: () -> Unit = {},
     onOpenDiagnostics: () -> Unit = {}
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -562,45 +668,161 @@ fun AppHeader(
             }
         }
 
-        // Right side: Emulator badge or Diagnostics info button
-        if (isEmulator) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFFFEF3C7))
-                    .border(1.dp, Color(0xFFFDE68A), RoundedCornerShape(8.dp))
-                    .clickable(onClick = onOpenDiagnostics)
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                    .testTag("emulator_header_badge")
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+        // Right side: Emulator badge + 3-Dot Overflow Menu
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (isEmulator) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFFFEF3C7))
+                        .border(1.dp, Color(0xFFFDE68A), RoundedCornerShape(8.dp))
+                        .clickable(onClick = onOpenDiagnostics)
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .testTag("emulator_header_badge")
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = "Emulator Mode Active",
+                            tint = Color(0xFFD97706),
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "EMULATOR",
+                            color = Color(0xFF92400E),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(4.dp))
+            }
+
+            Box {
+                IconButton(
+                    onClick = { menuExpanded = true },
+                    modifier = Modifier
+                        .size(36.dp)
+                        .testTag("main_menu_overflow_button")
+                ) {
                     Icon(
-                        imageVector = Icons.Default.Warning,
-                        contentDescription = "Emulator Mode Active",
-                        tint = Color(0xFFD97706),
-                        modifier = Modifier.size(13.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "EMULATOR",
-                        color = Color(0xFF92400E),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "More options",
+                        tint = Color(0xFF475569),
+                        modifier = Modifier.size(22.dp)
                     )
                 }
-            }
-        } else {
-            IconButton(
-                onClick = onOpenDiagnostics,
-                modifier = Modifier.size(32.dp).testTag("device_diagnostics_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Info,
-                    contentDescription = "Device Environment",
-                    tint = Color(0xFF64748B),
-                    modifier = Modifier.size(20.dp)
-                )
+
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                    modifier = Modifier
+                        .background(Color.White)
+                        .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
+                        .width(200.dp)
+                ) {
+                    // 1. Account
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = Color(0xFF2563EB),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = "Account",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFF1E293B)
+                                )
+                            }
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onOpenAccount()
+                        },
+                        modifier = Modifier.testTag("menu_account")
+                    )
+
+                    // 2. Privacy Policy
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Security,
+                                    contentDescription = null,
+                                    tint = Color(0xFF64748B),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = "Privacy Policy",
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF1E293B)
+                                )
+                            }
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onOpenPrivacy()
+                        },
+                        modifier = Modifier.testTag("menu_privacy")
+                    )
+
+                    // 3. About
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = Color(0xFF64748B),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = "About",
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF1E293B)
+                                )
+                            }
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onOpenAbout()
+                        },
+                        modifier = Modifier.testTag("menu_about")
+                    )
+
+                    HorizontalDivider(
+                        color = Color(0xFFF1F5F9),
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+
+                    // 4. Version
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Version ${BuildConfig.VERSION_NAME}",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF94A3B8),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onOpenAbout()
+                        },
+                        modifier = Modifier.testTag("menu_version")
+                    )
+                }
             }
         }
     }

@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -157,7 +158,7 @@ fun IncomingCallCard(
             // Contact Avatar
             ContactAvatar(
                 photoUri = callState.photoUri,
-                displayName = callState.contactName,
+                displayName = callState.displayTitle,
                 initial = callState.initial,
                 size = 68.dp
             )

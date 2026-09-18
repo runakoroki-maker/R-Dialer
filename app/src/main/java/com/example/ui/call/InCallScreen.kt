@@ -361,7 +361,7 @@ fun InCallScreen(
                             ) {
                                 ContactAvatar(
                                     photoUri = state.photoUri,
-                                    displayName = state.contactName,
+                                    displayName = state.displayTitle,
                                     initial = state.initial,
                                     size = 94.dp
                                 )
