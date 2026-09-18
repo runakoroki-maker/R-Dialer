@@ -345,7 +345,7 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `account screen displays Google sign-in and secure sign-in notice`() {
+  fun `account screen displays continue with email coming soon and continue as guest`() {
     var backPressed = false
 
     composeTestRule.setContent {
@@ -355,9 +355,9 @@ class ExampleRobolectricTest {
     }
 
     composeTestRule.onNodeWithTag("account_screen").assertIsDisplayed()
-    composeTestRule.onNodeWithText("Sign in to R Dialer").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("google_sign_in_button").assertIsDisplayed()
-    composeTestRule.onNodeWithText("Continue with Google").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("continue_with_email_button").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Continue with Email").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Coming Soon").assertIsDisplayed()
     composeTestRule.onNodeWithTag("continue_as_guest_button").assertIsDisplayed()
     composeTestRule.onNodeWithText("Continue as Guest").assertIsDisplayed()
     composeTestRule.onNodeWithText("Privacy & Local Separation").assertExists()
@@ -480,30 +480,6 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `account screen renders signed in profile info with profile avatar, name, and sign out button`() {
-    composeTestRule.setContent {
-      com.example.ui.account.AccountScreen(
-        onBack = {}
-      )
-    }
-
-    // Default is signed out in fresh test context
-    composeTestRule.onNodeWithTag("account_screen").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("google_sign_in_button").assertIsDisplayed()
-  }
-
-  @Test
-  fun `auth repository initializes and resolves server client ID properly`() {
-    val context = ApplicationProvider.getApplicationContext<Context>()
-    val authRepo = com.example.auth.AuthRepository.getInstance(context)
-    val serverClientId = authRepo.resolveServerClientId()
-
-    org.junit.Assert.assertNotNull(serverClientId)
-    assertTrue("Server client ID should end with apps.googleusercontent.com", serverClientId.endsWith("apps.googleusercontent.com"))
-    assertEquals(false, authRepo.isUserSignedIn())
-  }
-
-  @Test
   fun `privacy policy screen renders in-app with all sections and back button`() {
     var backPressed = false
 
@@ -520,7 +496,7 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithText("1. Introduction").assertExists()
     composeTestRule.onNodeWithText("2. Permissions & Why We Need Them").assertExists()
     composeTestRule.onNodeWithText("5. Data Storage & Local Processing").assertExists()
-    composeTestRule.onNodeWithText("6. Account & Google Sign-In").assertExists()
+    composeTestRule.onNodeWithText("6. Account & Privacy").assertExists()
 
     // Back button returns to dialer
     composeTestRule.onNodeWithTag("privacy_back_button").assertIsDisplayed().performClick()

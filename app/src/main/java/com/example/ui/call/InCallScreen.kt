@@ -305,19 +305,28 @@ fun InCallScreen(
                             Spacer(modifier = Modifier.height(12.dp))
 
                             Text(
-                                text = "Conference Call",
+                                text = "Conference Call Active",
                                 color = Color(0xFF0F172A),
                                 fontSize = 22.sp,
                                 fontWeight = FontWeight.Bold,
                                 textAlign = TextAlign.Center
                             )
 
-                            Text(
-                                text = "${state.conferenceParticipants.size} participants",
-                                color = Color(0xFF2563EB),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFFECFDF5))
+                                    .border(1.dp, Color(0xFFA7F3D0), RoundedCornerShape(12.dp))
+                                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "Successfully Merged • ${state.conferenceParticipants.size} Participants Connected",
+                                    color = Color(0xFF065F46),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
 
                             Spacer(modifier = Modifier.height(12.dp))
 
@@ -540,6 +549,53 @@ fun InCallScreen(
                             }
                         }
 
+                        // Merge Status / Feedback Banner
+                        if (!state.mergeStatusMessage.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.95f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFFECFDF5))
+                                    .border(1.dp, Color(0xFFA7F3D0), RoundedCornerShape(10.dp))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        if (state.mergeStatusMessage?.contains("Merging") == true) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(14.dp),
+                                                color = Color(0xFF059669),
+                                                strokeWidth = 2.dp
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                        }
+                                        Text(
+                                            text = state.mergeStatusMessage ?: "",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color(0xFF065F46)
+                                        )
+                                    }
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Dismiss",
+                                        tint = Color(0xFF065F46),
+                                        modifier = Modifier
+                                            .size(16.dp)
+                                            .clickable { CallManager.dismissMergeStatus() }
+                                    )
+                                }
+                            }
+                        }
+
                         // Dedicated Multiple Calls Section (When second call exists)
                         if (state.secondCall != null) {
                             val sec = state.secondCall
@@ -564,6 +620,29 @@ fun InCallScreen(
                                         color = Color(0xFF64748B),
                                         letterSpacing = 1.sp
                                     )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(Color(0xFFEFF6FF))
+                                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CallMerge,
+                                            contentDescription = null,
+                                            tint = Color(0xFF2563EB),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "2 Active Calls Ready — Tap Merge Calls to create Conference",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF1E40AF)
+                                        )
+                                    }
                                     Spacer(modifier = Modifier.height(10.dp))
 
                                     // Call 1

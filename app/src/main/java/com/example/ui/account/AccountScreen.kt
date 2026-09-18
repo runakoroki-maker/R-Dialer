@@ -76,9 +76,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
-import com.example.auth.AuthActionResult
-import com.example.auth.AuthRepository
-import com.example.auth.AuthUserState
 import com.example.data.callingcard.CallingCardData
 import com.example.data.callingcard.CallingCardRepository
 import com.example.data.callingcard.GuestSessionManager
@@ -99,11 +96,11 @@ private enum class AccountScreenSubView {
  * Main Account Screen adhering strictly to R Dialer Calling Card + Guest Mode specifications:
  *
  * 1. Guest Mode for Emulator Testing:
- *    - "Continue with Google" and "Continue as Guest"
+ *    - "Continue with Email" and "Continue as Guest"
  *    - Choose display name dialog
  *    - Opens Account Setup flow
  *    - Clearly displays "Guest Mode" in account area
- *    - Stored strictly locally, separated from Google account data
+ *    - Stored strictly locally, separated from cloud data
  *
  * 2. Account Setup Flow:
  *    - Triggered after sign in or guest name setup when not completed
@@ -119,11 +116,9 @@ private enum class AccountScreenSubView {
 @Composable
 fun AccountScreen(
     onBack: () -> Unit,
-    modifier: Modifier = Modifier,
-    authRepository: AuthRepository = AuthRepository.getInstance(LocalContext.current)
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val activity = context as? Activity
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val scrollState = rememberScrollState()
@@ -131,20 +126,17 @@ fun AccountScreen(
     val cardRepo = remember { CallingCardRepository.getInstance(context) }
     val guestManager = remember { GuestSessionManager.getInstance(context) }
 
-    val currentUser by authRepository.currentUserState.collectAsState()
     val isGuestActive by guestManager.isGuestActive.collectAsState()
     val guestDisplayName by guestManager.guestDisplayName.collectAsState()
     val isGuestSetupCompleted by guestManager.isGuestSetupCompleted.collectAsState()
 
     var currentSubView by remember { mutableStateOf(AccountScreenSubView.MAIN) }
     var isLoading by remember { mutableStateOf(false) }
-    var showSignOutConfirmDialog by remember { mutableStateOf(false) }
     var showGuestNameDialog by remember { mutableStateOf(false) }
     var guestNameInput by remember { mutableStateOf("") }
 
-    // Active session owner ID (Google UID or Guest)
+    // Active session owner ID (Guest)
     val sessionOwnerId: String? = when {
-        currentUser != null -> currentUser!!.uid
         isGuestActive -> CallingCardRepository.GUEST_OWNER_ID
         else -> null
     }
@@ -153,8 +145,8 @@ fun AccountScreen(
     var activeCallingCard by remember(sessionOwnerId) {
         mutableStateOf(
             if (sessionOwnerId != null) {
-                val defName = if (isGuestActive) guestDisplayName else currentUser?.displayName ?: "R Dialer User"
-                val photoUrl = if (isGuestActive) null else currentUser?.photoUrl
+                val defName = guestDisplayName
+                val photoUrl = null
                 cardRepo.loadCardForOwner(sessionOwnerId, defName, photoUrl)
             } else null
         )
@@ -167,8 +159,8 @@ fun AccountScreen(
 
     // Route to subviews
     if (currentSubView == AccountScreenSubView.SETUP && sessionOwnerId != null) {
-        val initialName = if (isGuestActive) guestDisplayName else currentUser?.displayName ?: "R Dialer User"
-        val initialPhoto = if (isGuestActive) null else currentUser?.photoUrl
+        val initialName = guestDisplayName
+        val initialPhoto = null
         AccountSetupScreen(
             initialName = initialName,
             initialPhotoUrl = initialPhoto,
@@ -261,21 +253,7 @@ fun AccountScreen(
                 .navigationBarsPadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            val user = currentUser
-
-            if (user != null) {
-                // ==========================================
-                // GOOGLE AUTHENTICATED STATE
-                // ==========================================
-                GoogleUserView(
-                    user = user,
-                    callingCard = activeCallingCard,
-                    isLoading = isLoading,
-                    onOpenSetup = { currentSubView = AccountScreenSubView.SETUP },
-                    onEditCallingCard = { currentSubView = AccountScreenSubView.CALLING_CARD_EDITOR },
-                    onRequestSignOut = { showSignOutConfirmDialog = true }
-                )
-            } else if (isGuestActive) {
+            if (isGuestActive) {
                 // ==========================================
                 // GUEST MODE ACTIVE STATE (Section 1)
                 // ==========================================
@@ -294,41 +272,12 @@ fun AccountScreen(
             } else {
                 // ==========================================
                 // SIGNED OUT STATE
-                // Choice: Continue with Google OR Continue as Guest
+                // Choice: Continue with Email OR Continue as Guest
                 // ==========================================
                 SignedOutView(
-                    isLoading = isLoading,
-                    onContinueWithGoogle = {
-                        if (activity == null) {
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar("Unable to access activity context.")
-                            }
-                            return@SignedOutView
-                        }
-                        isLoading = true
+                    onContinueWithEmail = {
                         coroutineScope.launch {
-                            try {
-                                when (val result = authRepository.signInWithGoogle(activity)) {
-                                    is AuthActionResult.Success -> {
-                                        val u = result.user
-                                        val isSetupDone = cardRepo.isSetupCompletedForOwner(u.uid)
-                                        activeCallingCard = cardRepo.loadCardForOwner(
-                                            u.uid,
-                                            u.displayName ?: "R Dialer User",
-                                            u.photoUrl
-                                        )
-                                        if (!isSetupDone) {
-                                            currentSubView = AccountScreenSubView.SETUP
-                                        }
-                                        snackbarHostState.showSnackbar("Welcome, ${u.displayName ?: "User"}!")
-                                    }
-                                    is AuthActionResult.Cancelled -> Unit
-                                    is AuthActionResult.Error -> snackbarHostState.showSnackbar(result.message)
-                                    is AuthActionResult.Idle, is AuthActionResult.Loading -> Unit
-                                }
-                            } finally {
-                                isLoading = false
-                            }
+                            snackbarHostState.showSnackbar("Email Sign-In — Coming Soon")
                         }
                     },
                     onContinueAsGuest = {
@@ -426,209 +375,9 @@ fun AccountScreen(
             }
         )
     }
-
-    // Google Sign-Out Confirmation Dialog
-    if (showSignOutConfirmDialog) {
-        AlertDialog(
-            onDismissRequest = { showSignOutConfirmDialog = false },
-            title = {
-                Text(
-                    text = "Sign Out",
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF0F172A)
-                )
-            },
-            text = {
-                Text(
-                    text = "Are you sure you want to sign out of R Dialer? Your phone calls and contacts will continue working normally.",
-                    fontSize = 14.sp,
-                    color = Color(0xFF475569)
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showSignOutConfirmDialog = false
-                        isLoading = true
-                        coroutineScope.launch {
-                            try {
-                                authRepository.signOut()
-                                cardRepo.clearCurrentSession()
-                                activeCallingCard = null
-                                snackbarHostState.showSnackbar("Signed out successfully.")
-                            } catch (e: Exception) {
-                                snackbarHostState.showSnackbar("Failed to sign out: ${e.message}")
-                            } finally {
-                                isLoading = false
-                            }
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
-                    modifier = Modifier.testTag("confirm_sign_out_button")
-                ) {
-                    Text("Sign Out", color = Color.White, fontWeight = FontWeight.SemiBold)
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showSignOutConfirmDialog = false },
-                    modifier = Modifier.testTag("cancel_sign_out_button")
-                ) {
-                    Text("Cancel", color = Color(0xFF64748B))
-                }
-            }
-        )
-    }
 }
 
-/**
- * Google Authenticated Profile View
- */
-@Composable
-private fun GoogleUserView(
-    user: AuthUserState,
-    callingCard: CallingCardData?,
-    isLoading: Boolean,
-    onOpenSetup: () -> Unit,
-    onEditCallingCard: () -> Unit,
-    onRequestSignOut: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("signed_in_container"),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Spacer(modifier = Modifier.height(12.dp))
 
-        // Avatar
-        Box(
-            modifier = Modifier
-                .size(96.dp)
-                .clip(CircleShape)
-                .background(Color(0xFFF1F5F9))
-                .border(3.dp, Color(0xFF2563EB), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            val photoToUse = callingCard?.effectivePhotoUrl ?: user.photoUrl
-            if (!photoToUse.isNullOrBlank()) {
-                AsyncImage(
-                    model = photoToUse,
-                    contentDescription = "Profile picture",
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(CircleShape)
-                        .testTag("user_profile_avatar"),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.linearGradient(
-                                listOf(Color(0xFF2563EB), Color(0xFF1D4ED8))
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = user.displayName?.firstOrNull()?.uppercase() ?: "U",
-                        color = Color.White,
-                        fontSize = 36.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        Text(
-            text = callingCard?.displayName ?: user.displayName ?: "R Dialer User",
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF0F172A),
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.testTag("user_display_name")
-        )
-
-        if (!user.email.isNullOrBlank()) {
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = user.email,
-                fontSize = 13.sp,
-                color = Color(0xFF64748B),
-                textAlign = TextAlign.Center,
-                modifier = Modifier.testTag("user_email")
-            )
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Badge
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(20.dp))
-                .background(Color(0xFFDCFCE7))
-                .border(1.dp, Color(0xFF86EFAC), RoundedCornerShape(20.dp))
-                .padding(horizontal = 12.dp, vertical = 4.dp)
-                .testTag("signed_in_status_badge")
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.CheckCircle,
-                    contentDescription = null,
-                    tint = Color(0xFF16A34A),
-                    modifier = Modifier.size(14.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "Google Account Authenticated",
-                    color = Color(0xFF166534),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // ==========================================
-        // CALLING SETTINGS -> CALLING CARD (Section 3)
-        // ==========================================
-        CallingSettingsSection(
-            callingCard = callingCard,
-            onEditCallingCard = onEditCallingCard
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Sign Out Button
-        OutlinedButton(
-            onClick = onRequestSignOut,
-            enabled = !isLoading,
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFDC2626)),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp)
-                .testTag("sign_out_button")
-        ) {
-            if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = Color(0xFFDC2626))
-            } else {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Sign Out", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFFDC2626))
-                }
-            }
-        }
-    }
-}
 
 /**
  * Guest Mode Profile View (Section 1)
@@ -830,13 +579,12 @@ private fun CallingSettingsSection(
 
 /**
  * Signed-out view offering:
- * - "Continue with Google"
- * - "Continue as Guest" (Section 1)
+ * - "Continue with Email" (Coming Soon)
+ * - "Continue as Guest"
  */
 @Composable
 private fun SignedOutView(
-    isLoading: Boolean,
-    onContinueWithGoogle: () -> Unit,
+    onContinueWithEmail: () -> Unit,
     onContinueAsGuest: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -872,7 +620,7 @@ private fun SignedOutView(
         Spacer(modifier = Modifier.height(18.dp))
 
         Text(
-            text = "Sign in to R Dialer",
+            text = "Account",
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF0F172A),
@@ -892,14 +640,14 @@ private fun SignedOutView(
 
         Spacer(modifier = Modifier.height(28.dp))
 
-        // 1. "Continue with Google" Button
+        // 1. "Continue with Email" Button (Coming Soon)
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(14.dp))
                 .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(14.dp))
-                .clickable(enabled = !isLoading, onClick = onContinueWithGoogle)
-                .testTag("google_sign_in_button"),
+                .clickable(onClick = onContinueWithEmail)
+                .testTag("continue_with_email_button"),
             shape = RoundedCornerShape(14.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
@@ -907,31 +655,59 @@ private fun SignedOutView(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = Color(0xFF2563EB))
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text("Signing in…", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color(0xFF1F2937))
-                } else {
-                    GoogleIcon(modifier = Modifier.size(22.dp))
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text("Continue with Google", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFEFF6FF)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = null,
+                            tint = Color(0xFF2563EB),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column {
+                        Text(
+                            text = "Continue with Email",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF1F2937),
+                            modifier = Modifier.testTag("continue_with_email_title")
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Coming Soon",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF64748B),
+                            modifier = Modifier.testTag("continue_with_email_coming_soon")
+                        )
+                    }
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // 2. "Continue as Guest" Button (Section 1 requirement)
+        // 2. "Continue as Guest" Button
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(14.dp))
                 .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(14.dp))
-                .clickable(enabled = !isLoading, onClick = onContinueAsGuest)
+                .clickable(onClick = onContinueAsGuest)
                 .testTag("continue_as_guest_button"),
             shape = RoundedCornerShape(14.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
@@ -940,29 +716,50 @@ private fun SignedOutView(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = null,
-                    tint = Color(0xFF475569),
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = "Continue as Guest",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF334155)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFFEF3C7)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Tune,
+                            contentDescription = null,
+                            tint = Color(0xFFD97706),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column {
+                        Text(
+                            text = "Continue as Guest",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF334155)
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Local emulator session",
+                            fontSize = 13.sp,
+                            color = Color(0xFF64748B)
+                        )
+                    }
+                }
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Concise Trust Message near sign-in button
+        // Concise Trust Message
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
@@ -993,7 +790,7 @@ private fun SignedOutView(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "Guest Mode operates entirely locally on your device without Firebase. Google sign-in passwords are never handled by R Dialer.",
+                        text = "R Dialer operates locally on your device. Calling Card identity and settings are stored securely on device.",
                         fontSize = 12.sp,
                         color = Color(0xFF64748B),
                         lineHeight = 16.sp
@@ -1001,60 +798,5 @@ private fun SignedOutView(
                 }
             }
         }
-    }
-}
-
-/**
- * Clean vector rendering of Google's multi-colored "G" branding.
- */
-@Composable
-fun GoogleIcon(modifier: Modifier = Modifier) {
-    androidx.compose.foundation.Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val cx = w / 2f
-        val cy = h / 2f
-        val r = (w.coerceAtMost(h) / 2f) * 0.95f
-        val stroke = r * 0.35f
-
-        // Blue right arc + horizontal bar
-        drawArc(
-            color = Color(0xFF4285F4),
-            startAngle = -45f,
-            sweepAngle = 90f,
-            useCenter = false,
-            style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke)
-        )
-        // Green bottom arc
-        drawArc(
-            color = Color(0xFF34A853),
-            startAngle = 45f,
-            sweepAngle = 90f,
-            useCenter = false,
-            style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke)
-        )
-        // Yellow bottom-left arc
-        drawArc(
-            color = Color(0xFFFBBC05),
-            startAngle = 135f,
-            sweepAngle = 90f,
-            useCenter = false,
-            style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke)
-        )
-        // Red top arc
-        drawArc(
-            color = Color(0xFFEA4335),
-            startAngle = 225f,
-            sweepAngle = 90f,
-            useCenter = false,
-            style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke)
-        )
-        // Center crossbar
-        drawLine(
-            color = Color(0xFF4285F4),
-            start = androidx.compose.ui.geometry.Offset(cx - (stroke * 0.2f), cy),
-            end = androidx.compose.ui.geometry.Offset(cx + r, cy),
-            strokeWidth = stroke
-        )
     }
 }

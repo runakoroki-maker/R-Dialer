@@ -309,45 +309,51 @@ object CallManager {
     }
 
     fun mergeCalls() {
+        val current = _callState.value
+        if (current != null) {
+            _callState.value = current.copy(mergeStatusMessage = "Merging calls into conference...")
+        }
         val c1 = activeCall
         val c2 = secondaryCall
         if (c1 != null && c2 != null) {
             try {
                 if (c1.conferenceableCalls.contains(c2)) {
                     c1.conference(c2)
-                    _callState.value = _callState.value?.copy(conferenceErrorMessage = null)
+                    _callState.value = _callState.value?.copy(conferenceErrorMessage = null, mergeStatusMessage = "Calls successfully merged into conference!")
                 } else if (c2.conferenceableCalls.contains(c1)) {
                     c2.conference(c1)
-                    _callState.value = _callState.value?.copy(conferenceErrorMessage = null)
+                    _callState.value = _callState.value?.copy(conferenceErrorMessage = null, mergeStatusMessage = "Calls successfully merged into conference!")
                 } else if (c1.details.can(Call.Details.CAPABILITY_MERGE_CONFERENCE)) {
                     c1.mergeConference()
-                    _callState.value = _callState.value?.copy(conferenceErrorMessage = null)
+                    _callState.value = _callState.value?.copy(conferenceErrorMessage = null, mergeStatusMessage = "Calls successfully merged into conference!")
                 } else {
                     // Try direct conference
                     try {
                         c1.conference(c2)
-                        _callState.value = _callState.value?.copy(conferenceErrorMessage = null)
+                        _callState.value = _callState.value?.copy(conferenceErrorMessage = null, mergeStatusMessage = "Calls successfully merged into conference!")
                     } catch (e: Exception) {
                         _callState.value = _callState.value?.copy(
-                            conferenceErrorMessage = "Conference calling isn't supported by this device or carrier."
+                            conferenceErrorMessage = "Conference calling isn't supported by this device or carrier.",
+                            mergeStatusMessage = null
                         )
                     }
                 }
             } catch (e: Exception) {
                 _callState.value = _callState.value?.copy(
-                    conferenceErrorMessage = "Conference calling isn't supported by this device or carrier."
+                    conferenceErrorMessage = "Conference calling isn't supported by this device or carrier.",
+                    mergeStatusMessage = null
                 )
             }
         } else if (_callState.value?.secondCall != null) {
             // Demo / Emulator mode simulation:
-            val current = _callState.value ?: return
-            val sec = current.secondCall ?: return
+            val curr = _callState.value ?: return
+            val sec = curr.secondCall ?: return
             val p1 = ConferenceParticipant(
                 id = "part_1",
-                displayName = current.contactName ?: current.number,
-                phoneNumber = current.number,
-                photoUri = current.photoUri,
-                durationSeconds = current.durationSeconds
+                displayName = curr.contactName ?: curr.number,
+                phoneNumber = curr.number,
+                photoUri = curr.photoUri,
+                durationSeconds = curr.durationSeconds
             )
             val p2 = ConferenceParticipant(
                 id = "part_2",
@@ -356,20 +362,26 @@ object CallManager {
                 photoUri = sec.photoUri,
                 durationSeconds = sec.durationSeconds
             )
-            _callState.value = current.copy(
+            _callState.value = curr.copy(
                 isConference = true,
                 conferenceParticipants = listOf(p1, p2),
                 secondCall = null,
                 canMergeCalls = false,
                 canSwapCalls = false,
                 telecomState = Call.STATE_ACTIVE,
-                conferenceErrorMessage = null
+                conferenceErrorMessage = null,
+                mergeStatusMessage = "Calls successfully merged into conference!"
             )
         } else {
             _callState.value = _callState.value?.copy(
-                conferenceErrorMessage = "Conference calling isn't supported by this device or carrier."
+                conferenceErrorMessage = "Conference calling isn't supported by this device or carrier.",
+                mergeStatusMessage = null
             )
         }
+    }
+
+    fun dismissMergeStatus() {
+        _callState.value = _callState.value?.copy(mergeStatusMessage = null)
     }
 
     fun swapCalls() {

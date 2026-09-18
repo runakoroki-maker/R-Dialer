@@ -90,6 +90,9 @@ import com.example.ui.privacy.PrivacyPolicyScreen
 import com.example.ui.recents.RecentsScreen
 import com.example.ui.recents.RecentsViewModel
 import com.example.ui.recordings.RecordingsScreen
+import com.example.ui.messages.MessagesScreen
+import com.example.ui.messages.MessagesViewModel
+import androidx.compose.material.icons.filled.Chat
 import com.example.ui.theme.MyApplicationTheme
 
 import androidx.compose.foundation.border
@@ -107,6 +110,7 @@ enum class DialerNavTab(val title: String) {
     DIALER("Dialer"),
     RECENTS("Recents"),
     CONTACTS("Contacts"),
+    MESSAGES("Messages"),
     RECORDINGS("Recordings")
 }
 
@@ -115,6 +119,7 @@ class MainActivity : ComponentActivity() {
     private val dialerViewModel: DialerViewModel by viewModels()
     private val recentsViewModel: RecentsViewModel by viewModels()
     private val contactsViewModel: ContactsViewModel by viewModels()
+    private val messagesViewModel: MessagesViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -129,7 +134,8 @@ class MainActivity : ComponentActivity() {
                 MainAppScreen(
                     dialerViewModel = dialerViewModel,
                     recentsViewModel = recentsViewModel,
-                    contactsViewModel = contactsViewModel
+                    contactsViewModel = contactsViewModel,
+                    messagesViewModel = messagesViewModel
                 )
             }
         }
@@ -162,7 +168,8 @@ class MainActivity : ComponentActivity() {
 fun MainAppScreen(
     dialerViewModel: DialerViewModel,
     recentsViewModel: RecentsViewModel,
-    contactsViewModel: ContactsViewModel
+    contactsViewModel: ContactsViewModel,
+    messagesViewModel: MessagesViewModel
 ) {
     val context = LocalContext.current
     var currentTab by remember { mutableStateOf(DialerNavTab.DIALER) }
@@ -221,13 +228,18 @@ fun MainAppScreen(
         if (results[Manifest.permission.READ_CALL_LOG] == true) {
             recentsViewModel.onPermissionResult(true)
         }
+        if (results[Manifest.permission.READ_SMS] == true && results[Manifest.permission.SEND_SMS] == true) {
+            messagesViewModel.onPermissionResult(true)
+        }
     }
 
     LaunchedEffect(Unit) {
         val permissions = mutableListOf(
             Manifest.permission.CALL_PHONE,
             Manifest.permission.READ_CONTACTS,
-            Manifest.permission.READ_CALL_LOG
+            Manifest.permission.READ_CALL_LOG,
+            Manifest.permission.READ_SMS,
+            Manifest.permission.SEND_SMS
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
@@ -314,6 +326,30 @@ fun MainAppScreen(
                         unselectedTextColor = Color(0xFF64748B)
                     ),
                     modifier = Modifier.testTag("nav_tab_contacts")
+                )
+
+                NavigationBarItem(
+                    selected = currentTab == DialerNavTab.MESSAGES,
+                    onClick = {
+                        currentTab = DialerNavTab.MESSAGES
+                        messagesViewModel.loadConversations()
+                    },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.Chat,
+                            contentDescription = "Messages",
+                            modifier = Modifier.size(24.dp)
+                        )
+                    },
+                    label = { Text("Messages", fontSize = 12.sp, fontWeight = FontWeight.Medium) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = Color(0xFF2563EB),
+                        selectedTextColor = Color(0xFF2563EB),
+                        indicatorColor = Color(0xFFDBEAFE),
+                        unselectedIconColor = Color(0xFF64748B),
+                        unselectedTextColor = Color(0xFF64748B)
+                    ),
+                    modifier = Modifier.testTag("nav_tab_messages")
                 )
 
                 NavigationBarItem(
@@ -532,6 +568,9 @@ fun MainAppScreen(
                                 currentTab = DialerNavTab.DIALER
                             }
                         )
+                    }
+                    DialerNavTab.MESSAGES -> {
+                        MessagesScreen(viewModel = messagesViewModel)
                     }
                     DialerNavTab.RECORDINGS -> {
                         RecordingsScreen(

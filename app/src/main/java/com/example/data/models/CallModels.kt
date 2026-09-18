@@ -93,6 +93,7 @@ data class ActiveCallState(
     val canMergeCalls: Boolean = false,
     val canSwapCalls: Boolean = false,
     val conferenceErrorMessage: String? = null,
+    val mergeStatusMessage: String? = null,
     // Video Calling features
     val isVideoCall: Boolean = false,
     val isLocalCameraEnabled: Boolean = false,

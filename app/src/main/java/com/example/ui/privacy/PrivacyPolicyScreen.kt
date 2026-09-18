@@ -178,10 +178,10 @@ fun PrivacyPolicyScreen(
                 content = "R Dialer does not require an online account to perform its core phone/dialer functions. Information used for core device functionality—including contacts, call history logs, dialed numbers, and preferences—is processed strictly on your device according to Android's sandboxed storage mechanisms. R Dialer does not transmit your personal contacts or call logs to external servers."
             )
 
-            // 6. Account & Google Sign-In
+            // 6. Account & Privacy
             PolicySection(
-                title = "6. Account & Google Sign-In",
-                content = "R Dialer supports optional Google Sign-In powered by Firebase Authentication using Google's official identity flow. R Dialer never requests, accesses, or stores your Google password or OTP credentials. When you choose to sign in, authentication is securely processed directly by Google and Firebase. Basic profile details (such as your display name, email address, and profile photo) are displayed in your account settings. Core calling, dialer, and contact features continue to operate completely offline without an account, and you may sign out at any time."
+                title = "6. Account & Privacy",
+                content = "R Dialer operates locally on your device with local data management. Calling Card identity details and preferences are maintained securely on your device. Account sign-in features such as Email Sign-In (Coming Soon) and Guest Mode are designed with privacy and local security in mind. Core calling, dialer, and contact features continue to operate completely offline without requiring an online account."
             )
 
             // 7. Data Security
