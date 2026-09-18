@@ -1,10 +1,7 @@
 package com.example.auth
 
-import android.accounts.AccountManager
 import android.app.Activity
 import android.content.Context
-import android.content.Intent
-import android.provider.Settings
 import android.util.Log
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
@@ -46,11 +43,6 @@ sealed class AuthActionResult {
     data class Success(val user: AuthUserState) : AuthActionResult()
     data class Error(val message: String) : AuthActionResult()
     object Cancelled : AuthActionResult()
-    /**
-     * Triggered when the device has zero Google accounts configured or CredentialManager
-     * returns NoCredentialException, requiring the official Android add-account flow.
-     */
-    data class NoAccountOnDevice(val intent: Intent) : AuthActionResult()
 }
 
 /**
@@ -119,43 +111,13 @@ class AuthRepository(private val context: Context) {
     fun getCurrentUser(): AuthUserState? = _currentUserState.value
 
     /**
-     * Checks if at least one Google account is configured on this Android device.
-     */
-    fun hasGoogleAccountOnDevice(): Boolean {
-        return try {
-            val accountManager = AccountManager.get(context)
-            val accounts = accountManager.getAccountsByType("com.google")
-            accounts.isNotEmpty()
-        } catch (e: Exception) {
-            Log.w(TAG, "Unable to inspect accounts on device: ${e.message}")
-            false
-        }
-    }
-
-    /**
-     * Creates an official Android Intent to add or create a Google account.
-     */
-    fun createAddGoogleAccountIntent(): Intent {
-        return Intent(Settings.ACTION_ADD_ACCOUNT).apply {
-            putExtra(Settings.EXTRA_ACCOUNT_TYPES, arrayOf("com.google"))
-        }
-    }
-
-    /**
      * Executes the official Google Sign-In flow using Android's Credential Manager
      * and authenticates the returned Google ID token with Firebase Authentication.
      *
-     * In case 1 (zero Google accounts on device or NoCredentialException returned),
-     * automatically returns AuthActionResult.NoAccountOnDevice with the official
-     * Google account addition intent so the user can add/create their account.
+     * Launches the official Google account chooser bottom sheet provided by Google Play Services.
+     * Never redirects to Android system settings or launches generic account-management pages.
      */
     suspend fun signInWithGoogle(activity: Activity): AuthActionResult = withContext(Dispatchers.IO) {
-        // Pre-check: if zero Google accounts are detected on device, directly direct user to add account
-        if (!hasGoogleAccountOnDevice()) {
-            Log.i(TAG, "Zero Google accounts detected on device. Directing to official account add flow.")
-            return@withContext AuthActionResult.NoAccountOnDevice(createAddGoogleAccountIntent())
-        }
-
         val serverClientId = resolveServerClientId()
 
         try {
@@ -179,27 +141,18 @@ class AuthRepository(private val context: Context) {
                 val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
                 return@withContext completeFirebaseSignInWithIdToken(googleIdTokenCredential.idToken)
             } else {
-                return@withContext AuthActionResult.Error("Unexpected credential type returned.")
+                return@withContext AuthActionResult.Error("Unexpected credential type returned from Google.")
             }
         } catch (e: GetCredentialCancellationException) {
             Log.i(TAG, "User cancelled Google Sign-In")
             return@withContext AuthActionResult.Cancelled
         } catch (e: NoCredentialException) {
-            Log.i(TAG, "NoCredentialException caught: device has no matching Google credentials. Launching account add flow.")
-            return@withContext AuthActionResult.NoAccountOnDevice(createAddGoogleAccountIntent())
+            Log.w(TAG, "NoCredentialException from CredentialManager: ${e.message}")
+            return@withContext AuthActionResult.Error(
+                "No Google accounts found. Please ensure your Google account is configured on this device."
+            )
         } catch (e: GetCredentialException) {
             Log.e(TAG, "CredentialManager error [${e.javaClass.simpleName}]: ${e.message}", e)
-            // Check if this error indicates missing credentials or no account on device
-            val isNoCred = e is NoCredentialException ||
-                    e.message?.contains("no credentials available", ignoreCase = true) == true ||
-                    e.message?.contains("no account", ignoreCase = true) == true ||
-                    e.type.contains("NoCredential", ignoreCase = true)
-
-            if (isNoCred) {
-                Log.i(TAG, "Credential error indicates no credential available; redirecting to official add account flow.")
-                return@withContext AuthActionResult.NoAccountOnDevice(createAddGoogleAccountIntent())
-            }
-
             val msg = when {
                 e.message?.contains("network", ignoreCase = true) == true ->
                     "Network error. Please check your internet connection and try again."
@@ -267,21 +220,44 @@ class AuthRepository(private val context: Context) {
         }
     }
 
-    private fun resolveServerClientId(): String {
+    fun resolveServerClientId(): String {
         // In order of preference:
         // 1. Injected via BuildConfig (Secrets plugin from .env / GOOGLE_WEB_CLIENT_ID)
         val configClientId = try {
             val field = BuildConfig::class.java.getField("GOOGLE_WEB_CLIENT_ID")
-            field.get(null) as? String
+            val value = field.get(null) as? String
+            if (!value.isNullOrBlank() && !value.contains("placeholder", ignoreCase = true) && !value.contains("YOUR_WEB_CLIENT_ID", ignoreCase = true)) {
+                value
+            } else {
+                null
+            }
         } catch (e: Exception) {
             null
         }
 
-        if (!configClientId.isNullOrBlank() && !configClientId.contains("placeholder", ignoreCase = true)) {
+        if (configClientId != null) {
             return configClientId
         }
 
-        // 2. Default web client ID associated with project roiki-1a740
+        // 2. Resource string: default_web_client_id (from google-services or strings.xml)
+        val defaultResId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+        if (defaultResId != 0) {
+            val resVal = context.getString(defaultResId)
+            if (resVal.isNotBlank() && !resVal.contains("placeholder", ignoreCase = true)) {
+                return resVal
+            }
+        }
+
+        // 3. Resource string: google_web_client_id
+        val customResId = context.resources.getIdentifier("google_web_client_id", "string", context.packageName)
+        if (customResId != 0) {
+            val resVal = context.getString(customResId)
+            if (resVal.isNotBlank() && !resVal.contains("placeholder", ignoreCase = true)) {
+                return resVal
+            }
+        }
+
+        // 4. Fallback associated with project roiki-1a740
         return "176920284831-placeholder.apps.googleusercontent.com"
     }
 }

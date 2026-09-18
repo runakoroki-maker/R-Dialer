@@ -165,40 +165,6 @@ fun AccountScreen(
         currentSubView = AccountScreenSubView.MAIN
     }
 
-    // Official Android account add/create launcher
-    val addGoogleAccountLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) {
-        if (activity != null && authRepository.hasGoogleAccountOnDevice()) {
-            isLoading = true
-            coroutineScope.launch {
-                try {
-                    when (val result = authRepository.signInWithGoogle(activity)) {
-                        is AuthActionResult.Success -> {
-                            val user = result.user
-                            val isSetupDone = cardRepo.isSetupCompletedForOwner(user.uid)
-                            activeCallingCard = cardRepo.loadCardForOwner(
-                                user.uid,
-                                user.displayName ?: "R Dialer User",
-                                user.photoUrl
-                            )
-                            if (!isSetupDone) {
-                                currentSubView = AccountScreenSubView.SETUP
-                            }
-                            snackbarHostState.showSnackbar("Welcome, ${user.displayName ?: "User"}!")
-                        }
-                        is AuthActionResult.Cancelled -> Unit
-                        is AuthActionResult.Error -> snackbarHostState.showSnackbar(result.message)
-                        is AuthActionResult.NoAccountOnDevice -> Unit
-                        is AuthActionResult.Idle, is AuthActionResult.Loading -> Unit
-                    }
-                } finally {
-                    isLoading = false
-                }
-            }
-        }
-    }
-
     // Route to subviews
     if (currentSubView == AccountScreenSubView.SETUP && sessionOwnerId != null) {
         val initialName = if (isGuestActive) guestDisplayName else currentUser?.displayName ?: "R Dialer User"
@@ -355,9 +321,6 @@ fun AccountScreen(
                                             currentSubView = AccountScreenSubView.SETUP
                                         }
                                         snackbarHostState.showSnackbar("Welcome, ${u.displayName ?: "User"}!")
-                                    }
-                                    is AuthActionResult.NoAccountOnDevice -> {
-                                        addGoogleAccountLauncher.launch(result.intent)
                                     }
                                     is AuthActionResult.Cancelled -> Unit
                                     is AuthActionResult.Error -> snackbarHostState.showSnackbar(result.message)

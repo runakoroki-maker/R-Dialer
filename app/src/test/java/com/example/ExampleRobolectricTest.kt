@@ -493,15 +493,14 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `auth repository handles no account on device intent creation`() {
+  fun `auth repository initializes and resolves server client ID properly`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val authRepo = com.example.auth.AuthRepository.getInstance(context)
-    val addAccountIntent = authRepo.createAddGoogleAccountIntent()
+    val serverClientId = authRepo.resolveServerClientId()
 
-    assertEquals(android.provider.Settings.ACTION_ADD_ACCOUNT, addAccountIntent.action)
-    val accountTypes = addAccountIntent.getStringArrayExtra(android.provider.Settings.EXTRA_ACCOUNT_TYPES)
-    org.junit.Assert.assertNotNull(accountTypes)
-    assertEquals("com.google", accountTypes?.firstOrNull())
+    org.junit.Assert.assertNotNull(serverClientId)
+    assertTrue("Server client ID should end with apps.googleusercontent.com", serverClientId.endsWith("apps.googleusercontent.com"))
+    assertEquals(false, authRepo.isUserSignedIn())
   }
 
   @Test
