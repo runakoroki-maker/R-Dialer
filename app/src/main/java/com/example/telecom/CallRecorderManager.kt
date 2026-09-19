@@ -115,11 +115,23 @@ object CallRecorderManager {
                 MediaRecorder()
             }
 
-            // Attempt VOICE_COMMUNICATION first (standard VoIP / Telecom audio route)
-            try {
-                recorder.setAudioSource(MediaRecorder.AudioSource.VOICE_COMMUNICATION)
-            } catch (_: Exception) {
-                // Fall back to MIC if VOICE_COMMUNICATION is restricted by OEM
+            // Attempt multiple supported audio sources for two-way call recording
+            var sourceSuccess = false
+            val audioSources = listOf(
+                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                MediaRecorder.AudioSource.VOICE_CALL,
+                MediaRecorder.AudioSource.MIC,
+                MediaRecorder.AudioSource.VOICE_RECOGNITION
+            )
+            for (source in audioSources) {
+                try {
+                    recorder.setAudioSource(source)
+                    sourceSuccess = true
+                    break
+                } catch (_: Exception) {}
+            }
+
+            if (!sourceSuccess) {
                 recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
             }
 
@@ -137,13 +149,9 @@ object CallRecorderManager {
             _errorMessage.value = null
             startTimer()
             true
-        } catch (e: SecurityException) {
-            cleanupRecorder()
-            _errorMessage.value = "Call recording isn't supported on this device."
-            false
         } catch (e: Exception) {
             cleanupRecorder()
-            _errorMessage.value = "Call recording isn't supported on this device."
+            _errorMessage.value = "Call recording is not supported on this device/carrier."
             false
         }
     }

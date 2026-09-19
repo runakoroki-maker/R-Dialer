@@ -47,12 +47,15 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.SwapCalls
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -216,22 +219,60 @@ fun InCallScreen(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF2563EB))
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "R DIALER",
-                        color = Color(0xFF2563EB),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.sp
-                    )
+                    Spacer(modifier = Modifier.width(24.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF2563EB))
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "R DIALER",
+                            color = Color(0xFF2563EB),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 2.sp
+                        )
+                    }
+
+                    if (isEmulator) {
+                        var showEmulatorMenu by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(
+                                onClick = { showEmulatorMenu = true },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.MoreVert,
+                                    contentDescription = "Emulator Menu",
+                                    tint = Color(0xFF2563EB),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showEmulatorMenu,
+                                onDismissRequest = { showEmulatorMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Simulate Another Incoming Call") },
+                                    onClick = {
+                                        showEmulatorMenu = false
+                                        CallManager.simulateDemoCallWaiting(context)
+                                    }
+                                )
+                            }
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.width(24.dp))
+                    }
                 }
 
                 if (isEmulator) {
@@ -648,30 +689,51 @@ fun InCallScreen(
                                     // Call 1
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.CenterVertically
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        ContactAvatar(
-                                            photoUri = state.photoUri,
-                                            displayName = state.displayTitle,
-                                            initial = state.initial,
-                                            size = 38.dp
-                                        )
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = state.displayTitle,
-                                                fontSize = 14.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = Color(0xFF0F172A),
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            ContactAvatar(
+                                                photoUri = state.photoUri,
+                                                displayName = state.displayTitle,
+                                                initial = state.initial,
+                                                size = 38.dp
                                             )
-                                            val isPrimaryHeld = state.telecomState == Call.STATE_HOLDING
-                                            Text(
-                                                text = if (isPrimaryHeld) "On Hold" else "Active",
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Medium,
-                                                color = if (isPrimaryHeld) Color(0xFFD97706) else Color(0xFF059669)
+                                            Spacer(modifier = Modifier.width(10.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = state.displayTitle,
+                                                    fontSize = 14.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = Color(0xFF0F172A),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                val isPrimaryHeld = state.telecomState == Call.STATE_HOLDING
+                                                Text(
+                                                    text = if (isPrimaryHeld) "On Hold" else "Active",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                    color = if (isPrimaryHeld) Color(0xFFD97706) else Color(0xFF059669)
+                                                )
+                                            }
+                                        }
+                                        IconButton(
+                                            onClick = { CallManager.disconnectCall1() },
+                                            modifier = Modifier
+                                                .size(34.dp)
+                                                .clip(CircleShape)
+                                                .background(Color(0xFFFEE2E2))
+                                                .testTag("end_call_1_button")
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.CallEnd,
+                                                contentDescription = "End Call 1",
+                                                tint = Color(0xFFDC2626),
+                                                modifier = Modifier.size(16.dp)
                                             )
                                         }
                                     }
@@ -680,78 +742,144 @@ fun InCallScreen(
                                     HorizontalDivider(color = Color(0xFFE2E8F0), thickness = 0.5.dp)
                                     Spacer(modifier = Modifier.height(8.dp))
 
-                                    // Call 2
+                                    // Call 2 / Call Waiting
+                                    val isSecRinging = sec.telecomState == Call.STATE_RINGING
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.CenterVertically
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        ContactAvatar(
-                                            photoUri = sec.photoUri,
-                                            displayName = sec.displayTitle,
-                                            initial = sec.initial,
-                                            size = 38.dp
-                                        )
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = sec.displayTitle,
-                                                fontSize = 14.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = Color(0xFF0F172A),
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            ContactAvatar(
+                                                photoUri = sec.photoUri,
+                                                displayName = sec.displayTitle,
+                                                initial = sec.initial,
+                                                size = 38.dp
                                             )
-                                            val isSecHeld = sec.telecomState == Call.STATE_HOLDING
-                                            Text(
-                                                text = if (isSecHeld) "On Hold" else "Active",
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Medium,
-                                                color = if (isSecHeld) Color(0xFFD97706) else Color(0xFF059669)
-                                            )
+                                            Spacer(modifier = Modifier.width(10.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = sec.displayTitle,
+                                                    fontSize = 14.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = Color(0xFF0F172A),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                Text(
+                                                    text = if (isSecRinging) "Incoming Call Waiting..." else (if (sec.telecomState == Call.STATE_HOLDING) "On Hold" else "Active"),
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                    color = if (isSecRinging) Color(0xFFD97706) else (if (sec.telecomState == Call.STATE_HOLDING) Color(0xFFD97706) else Color(0xFF059669))
+                                                )
+                                            }
+                                        }
+                                        if (!isSecRinging) {
+                                            IconButton(
+                                                onClick = { CallManager.disconnectCall2() },
+                                                modifier = Modifier
+                                                    .size(34.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color(0xFFFEE2E2))
+                                                    .testTag("end_call_2_button")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.CallEnd,
+                                                    contentDescription = "End Call 2",
+                                                    tint = Color(0xFFDC2626),
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
                                         }
                                     }
 
                                     Spacer(modifier = Modifier.height(12.dp))
 
-                                    // Action Buttons: Swap Calls & Merge Calls
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Button(
-                                            onClick = { CallManager.swapCalls() },
-                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
-                                            shape = RoundedCornerShape(10.dp),
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(38.dp)
-                                                .testTag("swap_calls_button")
+                                    // Action Buttons: Swap/Merge or Answer/Decline Call Waiting
+                                    if (isSecRinging) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.Default.SwapCalls,
-                                                contentDescription = "Swap Calls",
-                                                modifier = Modifier.size(15.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Swap Calls", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                        }
+                                            Button(
+                                                onClick = { CallManager.declineSecondCall() },
+                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                                                shape = RoundedCornerShape(10.dp),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(38.dp)
+                                                    .testTag("decline_second_call_button")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.CallEnd,
+                                                    contentDescription = "Decline",
+                                                    modifier = Modifier.size(15.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Decline", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                            }
 
-                                        Button(
-                                            onClick = { CallManager.mergeCalls() },
-                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
-                                            shape = RoundedCornerShape(10.dp),
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(38.dp)
-                                                .testTag("merge_calls_button")
+                                            Button(
+                                                onClick = { CallManager.answerSecondCall() },
+                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                                                shape = RoundedCornerShape(10.dp),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(38.dp)
+                                                    .testTag("answer_second_call_button")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Call,
+                                                    contentDescription = "Answer",
+                                                    modifier = Modifier.size(15.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Answer", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                            }
+                                        }
+                                    } else {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.Default.CallMerge,
-                                                contentDescription = "Merge Calls",
-                                                modifier = Modifier.size(15.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Merge Calls", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                            Button(
+                                                onClick = { CallManager.swapCalls() },
+                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                                                shape = RoundedCornerShape(10.dp),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(38.dp)
+                                                    .testTag("swap_calls_button")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.SwapCalls,
+                                                    contentDescription = "Swap Calls",
+                                                    modifier = Modifier.size(15.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Swap Calls", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                            }
+
+                                            Button(
+                                                onClick = { CallManager.mergeCalls() },
+                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                                                shape = RoundedCornerShape(10.dp),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(38.dp)
+                                                    .testTag("merge_calls_button")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.CallMerge,
+                                                    contentDescription = "Merge Calls",
+                                                    modifier = Modifier.size(15.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Merge Calls", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                            }
                                         }
                                     }
                                 }

@@ -97,14 +97,33 @@ object CallManager {
                 val contact = ContactRepository(context).findContactByNumber(rawNumber)
                 val current = _callState.value
                 if (current != null && activeCall == call) {
+                    val contactName = contact?.displayName
                     val updated = current.copy(
-                        contactName = contact?.displayName,
+                        contactName = contactName,
                         photoUri = contact?.photoUri,
                         simLabel = simLabel
                     )
                     _callState.value = updated
                     if (call.state == Call.STATE_RINGING) {
                         CallNotificationManager.showIncomingCallNotification(context, updated)
+                    }
+
+                    // Check if automatic recording for specified number is enabled
+                    if (CallRecordingPreferences.isEnabled(context)) {
+                        val specifiedNum = CallRecordingPreferences.getPhoneNumber(context)
+                        if (!specifiedNum.isNullOrBlank()) {
+                            val cleanRaw = rawNumber.replace("[^0-9+]".toRegex(), "")
+                            val cleanSpec = specifiedNum.replace("[^0-9+]".toRegex(), "")
+                            if ((cleanRaw.isNotEmpty() && cleanSpec.isNotEmpty()) &&
+                                (cleanRaw.endsWith(cleanSpec.takeLast(7)) || cleanSpec.endsWith(cleanRaw.takeLast(7)))) {
+                                CallRecorderManager.startRecording(
+                                    context = context,
+                                    contactName = contactName ?: CallRecordingPreferences.getContactName(context),
+                                    phoneNumber = rawNumber,
+                                    isIncoming = isIncoming
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -528,6 +547,88 @@ object CallManager {
         CallNotificationManager.showIncomingCallNotification(context, state)
     }
 
+    fun simulateDemoCallWaiting(
+        context: Context,
+        number: String = "+1 (555) 019-8833",
+        name: String = "Alex Rivera",
+        simLabel: String? = "SIM 1 • Jio (Call Waiting)"
+    ) {
+        val current = _callState.value ?: return
+        if (current.secondCall != null || current.isConference) return
+        appContext = context.applicationContext
+        scope.launch {
+            val secState = ActiveCallState(
+                number = number,
+                contactName = name,
+                photoUri = null,
+                telecomState = Call.STATE_RINGING,
+                isIncoming = true,
+                durationSeconds = 0L,
+                simLabel = simLabel
+            )
+            _callState.value = current.copy(
+                telecomState = Call.STATE_ACTIVE,
+                secondCall = secState,
+                canMergeCalls = true,
+                canSwapCalls = true,
+                mergeStatusMessage = "Incoming Call Waiting: $name ($number)"
+            )
+        }
+    }
+
+    fun answerSecondCall() {
+        val s2 = secondaryCall
+        if (s2 != null) {
+            try {
+                activeCall?.hold()
+                s2.answer(VideoProfile.STATE_AUDIO_ONLY)
+                _callState.value = _callState.value?.copy(mergeStatusMessage = "Answered incoming call waiting. Previous call placed on hold.")
+            } catch (e: Exception) {
+                _callState.value = _callState.value?.copy(conferenceErrorMessage = "Unable to answer second call: ${e.message}")
+            }
+        } else {
+            val current = _callState.value
+            val sec = current?.secondCall
+            if (sec != null) {
+                val primaryAsSec = current.copy(
+                    secondCall = null,
+                    telecomState = Call.STATE_HOLDING
+                )
+                val activeSec = sec.copy(
+                    telecomState = Call.STATE_ACTIVE,
+                    secondCall = null
+                )
+                _callState.value = activeSec.copy(
+                    secondCall = primaryAsSec.copy(secondCall = null),
+                    canMergeCalls = true,
+                    canSwapCalls = true,
+                    mergeStatusMessage = "Answered Call Waiting. Previous call placed on hold."
+                )
+            }
+        }
+    }
+
+    fun declineSecondCall() {
+        val s2 = secondaryCall
+        if (s2 != null) {
+            try {
+                s2.reject(false, null)
+            } catch (e: Exception) {
+                s2.disconnect()
+            }
+            secondaryCall = null
+        }
+        val current = _callState.value
+        if (current != null) {
+            _callState.value = current.copy(
+                secondCall = null,
+                canMergeCalls = false,
+                canSwapCalls = false,
+                mergeStatusMessage = "Second call declined."
+            )
+        }
+    }
+
     fun answer() {
         if (activeCall != null) {
             activeCall?.answer(VideoProfile.STATE_AUDIO_ONLY)
@@ -566,6 +667,90 @@ object CallManager {
                     delay(800)
                     _callState.value = null
                 }
+            }
+        }
+    }
+
+    fun disconnectCall1() {
+        val c1 = activeCall
+        val c2 = secondaryCall
+        if (c1 != null) {
+            try {
+                c1.disconnect()
+            } catch (e: Exception) {
+                c1.disconnect()
+            }
+            if (c2 != null) {
+                try {
+                    c2.unhold()
+                } catch (e: Exception) {}
+                activeCall = c2
+                secondaryCall = null
+                val current = _callState.value
+                val sec = current?.secondCall
+                if (sec != null) {
+                    _callState.value = sec.copy(
+                        secondCall = null,
+                        telecomState = Call.STATE_ACTIVE,
+                        canMergeCalls = false,
+                        canSwapCalls = false,
+                        mergeStatusMessage = "Ended Call 1. Resumed Call 2."
+                    )
+                }
+            }
+        } else {
+            val current = _callState.value
+            val sec = current?.secondCall
+            if (sec != null) {
+                _callState.value = sec.copy(
+                    secondCall = null,
+                    telecomState = Call.STATE_ACTIVE,
+                    canMergeCalls = false,
+                    canSwapCalls = false,
+                    mergeStatusMessage = "Ended Call 1. Resumed Call 2."
+                )
+            } else {
+                disconnect()
+            }
+        }
+    }
+
+    fun disconnectCall2() {
+        val c2 = secondaryCall
+        val c1 = activeCall
+        if (c2 != null) {
+            try {
+                c2.disconnect()
+            } catch (e: Exception) {
+                c2.disconnect()
+            }
+            secondaryCall = null
+            try {
+                c1?.unhold()
+            } catch (e: Exception) {}
+            if (c1 != null) {
+                activeCall = c1
+            }
+            val current = _callState.value
+            if (current != null) {
+                _callState.value = current.copy(
+                    telecomState = Call.STATE_ACTIVE,
+                    secondCall = null,
+                    canMergeCalls = false,
+                    canSwapCalls = false,
+                    mergeStatusMessage = "Ended Call 2. Resumed Call 1."
+                )
+            }
+        } else {
+            val current = _callState.value
+            val sec = current?.secondCall
+            if (sec != null) {
+                _callState.value = current.copy(
+                    secondCall = null,
+                    canMergeCalls = false,
+                    canSwapCalls = false,
+                    mergeStatusMessage = "Ended Call 2. Resumed Call 1."
+                )
             }
         }
     }

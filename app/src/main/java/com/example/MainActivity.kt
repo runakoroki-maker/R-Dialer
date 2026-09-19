@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -87,6 +88,7 @@ import com.example.ui.contacts.ContactsViewModel
 import com.example.ui.dialer.DialerScreen
 import com.example.ui.dialer.DialerViewModel
 import com.example.ui.privacy.PrivacyPolicyScreen
+import com.example.ui.settings.SettingsScreen
 import com.example.ui.recents.RecentsScreen
 import com.example.ui.recents.RecentsViewModel
 import com.example.ui.recordings.RecordingsScreen
@@ -103,7 +105,8 @@ import com.example.util.EmulatorDetector
 
 enum class SubScreen {
     ACCOUNT,
-    PRIVACY_POLICY
+    PRIVACY_POLICY,
+    SETTINGS
 }
 
 enum class DialerNavTab(val title: String) {
@@ -188,6 +191,11 @@ fun MainAppScreen(
 
     if (activeSubScreen == SubScreen.PRIVACY_POLICY) {
         PrivacyPolicyScreen(onBack = { activeSubScreen = null })
+        return
+    }
+
+    if (activeSubScreen == SubScreen.SETTINGS) {
+        SettingsScreen(onBack = { activeSubScreen = null })
         return
     }
 
@@ -390,6 +398,7 @@ fun MainAppScreen(
                 onOpenAccount = { activeSubScreen = SubScreen.ACCOUNT },
                 onOpenPrivacy = { activeSubScreen = SubScreen.PRIVACY_POLICY },
                 onOpenAbout = { showAboutDialog = true },
+                onOpenSettings = { activeSubScreen = SubScreen.SETTINGS },
                 onOpenDiagnostics = { showDiagnosticsDialog = true }
             )
 
@@ -659,6 +668,7 @@ fun AppHeader(
     onOpenAccount: () -> Unit = {},
     onOpenPrivacy: () -> Unit = {},
     onOpenAbout: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     onOpenDiagnostics: () -> Unit = {}
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -836,6 +846,31 @@ fun AppHeader(
                             onOpenAbout()
                         },
                         modifier = Modifier.testTag("menu_about")
+                    )
+
+                    // 4. Settings
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = null,
+                                    tint = Color(0xFF64748B),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = "Settings",
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF1E293B)
+                                )
+                            }
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onOpenSettings()
+                        },
+                        modifier = Modifier.testTag("menu_settings")
                     )
 
                     HorizontalDivider(
