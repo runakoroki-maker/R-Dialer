@@ -28,7 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -40,6 +40,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -54,26 +56,31 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import coil.compose.AsyncImage
 import com.example.data.models.SmsConversation
 import com.example.data.models.SmsMessageItem
+import com.example.ai.SmartSmsInfo
+import com.example.util.EmulatorDetector
 import com.example.ui.contacts.PermissionDeniedCard
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 @Composable
-fun MessagesScreen(
-    viewModel: MessagesViewModel,
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
+fun MessagesScreen(viewModel: MessagesViewModel) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
 
     val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { results ->
-        val granted = (results[Manifest.permission.READ_SMS] == true) &&
-                      (results[Manifest.permission.SEND_SMS] == true)
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
         viewModel.onPermissionResult(granted)
     }
 
@@ -81,115 +88,153 @@ fun MessagesScreen(
         viewModel.checkPermissionAndLoad()
     }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color.White)
-            .testTag("messages_screen")
-    ) {
-        when {
-            !uiState.hasPermission -> {
-                PermissionDeniedCard(
-                    title = "SMS permission is required to view and send messages.",
-                    onGrantClick = {
-                        permissionLauncher.launch(
-                            arrayOf(
-                                Manifest.permission.READ_SMS,
-                                Manifest.permission.SEND_SMS,
-                                Manifest.permission.RECEIVE_SMS
-                            )
-                        )
-                    },
-                    onSettingsClick = {
-                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                            data = Uri.fromParts("package", context.packageName, null)
-                        }
-                        context.startActivity(intent)
-                    }
-                )
+    if (!uiState.hasPermission) {
+        PermissionDeniedCard(
+            title = "SMS permission is required to display your messages.",
+            onGrantClick = {
+                permissionLauncher.launch(Manifest.permission.READ_SMS)
+            },
+            onSettingsClick = {
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.fromParts("package", context.packageName, null)
+                }
+                context.startActivity(intent)
             }
-            uiState.selectedThreadId != null -> {
-                ConversationDetailView(
-                    recipientName = uiState.selectedName ?: uiState.selectedAddress ?: "Conversation",
-                    recipientAddress = uiState.selectedAddress ?: "",
-                    messages = uiState.messages,
-                    isLoading = uiState.isLoading,
-                    newMessageText = uiState.newMessageText,
-                    onTextChanged = { viewModel.updateNewMessageText(it) },
-                    onSend = { body ->
-                        uiState.selectedAddress?.let { address ->
-                            viewModel.sendSms(address, body) { success ->
-                                // Callback
+        )
+    } else {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFFF8FAFC))
+        ) {
+            when {
+                uiState.selectedThreadId != null || uiState.selectedAddress != null -> {
+                    ConversationDetailView(
+                        recipientName = uiState.selectedName ?: uiState.selectedAddress ?: "Unknown",
+                        recipientAddress = uiState.selectedAddress ?: "",
+                        messages = uiState.messages,
+                        isLoading = uiState.isLoading,
+                        newMessageText = uiState.newMessageText,
+                        currentSmartInfo = uiState.currentSmartInfo,
+                        onTextChanged = { viewModel.updateNewMessageText(it) },
+                        onSend = { body ->
+                            uiState.selectedAddress?.let { address ->
+                                viewModel.sendSms(address, body) { _ -> }
                             }
+                        },
+                        onRescan = {
+                            viewModel.rescanCurrentConversation()
+                        },
+                        onBack = {
+                            viewModel.closeConversation()
                         }
-                    },
-                    onBack = { viewModel.closeConversation() }
-                )
-            }
-            else -> {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                ) {
-                    Text(
-                        text = "Messages",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF0F172A),
-                        modifier = Modifier.padding(vertical = 8.dp)
                     )
+                }
+                else -> {
+                    val isEmulator = EmulatorDetector.isEmulator()
+                    var showMenu by remember { mutableStateOf(false) }
 
-                    if (uiState.isLoading) {
-                        Box(
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .navigationBarsPadding()
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                    ) {
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(1f),
-                            contentAlignment = Alignment.Center
+                                .padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            CircularProgressIndicator(color = Color(0xFF2563EB))
-                        }
-                    } else if (uiState.conversations.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    imageVector = Icons.Default.Chat,
-                                    contentDescription = null,
-                                    tint = Color(0xFF94A3B8),
-                                    modifier = Modifier.size(48.dp)
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text(
-                                    text = "No SMS conversations found",
-                                    fontSize = 15.sp,
-                                    color = Color(0xFF64748B),
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f)
-                        ) {
-                            items(uiState.conversations) { conv ->
-                                ConversationItemRow(
-                                    conversation = conv,
-                                    onClick = {
-                                        viewModel.selectConversation(
-                                            conv.threadId,
-                                            conv.address,
-                                            conv.contactName
+                            Text(
+                                text = "Messages",
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF0F172A)
+                            )
+                            if (isEmulator) {
+                                Box {
+                                    IconButton(
+                                        onClick = { showMenu = true },
+                                        modifier = Modifier.testTag("messages_overflow_menu_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.MoreVert,
+                                            contentDescription = "Menu",
+                                            tint = Color(0xFF0F172A)
                                         )
                                     }
-                                )
-                                HorizontalDivider(color = Color(0xFFF1F5F9))
+                                    DropdownMenu(
+                                        expanded = showMenu,
+                                        onDismissRequest = { showMenu = false }
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text("Check Demo Messages") },
+                                            onClick = {
+                                                showMenu = false
+                                                viewModel.loadDemoZomatoMessage()
+                                            },
+                                            modifier = Modifier.testTag("menu_check_demo_messages")
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (uiState.isLoading) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(color = Color(0xFF2563EB))
+                            }
+                        } else if (uiState.conversations.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.Chat,
+                                        contentDescription = null,
+                                        tint = Color(0xFF94A3B8),
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Text(
+                                        text = "No SMS conversations found",
+                                        fontSize = 15.sp,
+                                        color = Color(0xFF64748B),
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f)
+                            ) {
+                                items(uiState.conversations) { conv ->
+                                    val smartInfo = uiState.smartInfoMap[conv.address]
+                                    ConversationItemRow(
+                                        conversation = conv,
+                                        smartInfo = smartInfo,
+                                        onClick = {
+                                            viewModel.selectConversation(
+                                                conv.threadId,
+                                                conv.address,
+                                                conv.contactName
+                                            )
+                                        }
+                                    )
+                                    HorizontalDivider(color = Color(0xFFF1F5F9))
+                                }
                             }
                         }
                     }
@@ -202,9 +247,10 @@ fun MessagesScreen(
 @Composable
 fun ConversationItemRow(
     conversation: SmsConversation,
+    smartInfo: SmartSmsInfo?,
     onClick: () -> Unit
 ) {
-    val displayName = conversation.contactName ?: conversation.address
+    val displayName = smartInfo?.brand ?: conversation.contactName ?: conversation.address
     val timeFormatted = formatSmsTime(conversation.date)
 
     Row(
@@ -219,15 +265,23 @@ fun ConversationItemRow(
             modifier = Modifier
                 .size(46.dp)
                 .clip(CircleShape)
-                .background(Color(0xFFDBEAFE)),
+                .background(if (smartInfo?.isAutomated == true) Color(0xFFEFF6FF) else Color(0xFFDBEAFE)),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = displayName.firstOrNull()?.uppercase() ?: "#",
-                color = Color(0xFF1D4ED8),
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
+            if (smartInfo?.isVerified == true && !smartInfo.logoUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = smartInfo.logoUrl,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().clip(CircleShape)
+                )
+            } else {
+                Icon(
+                    imageVector = if (smartInfo?.isAutomated == true) Icons.Default.Verified else Icons.AutoMirrored.Filled.Chat,
+                    contentDescription = null,
+                    tint = Color(0xFF1D4ED8),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
 
         Spacer(modifier = Modifier.width(12.dp))
@@ -238,15 +292,28 @@ fun ConversationItemRow(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = displayName,
-                    fontSize = 15.sp,
-                    fontWeight = if (!conversation.read) FontWeight.Bold else FontWeight.SemiBold,
-                    color = Color(0xFF0F172A),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
-                )
+                ) {
+                    Text(
+                        text = displayName,
+                        fontSize = 15.sp,
+                        fontWeight = if (!conversation.read) FontWeight.Bold else FontWeight.SemiBold,
+                        color = Color(0xFF0F172A),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (smartInfo?.isVerified == true) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.Verified,
+                            contentDescription = "Verified",
+                            tint = Color(0xFF16A34A),
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
                 Text(
                     text = timeFormatted,
                     fontSize = 11.sp,
@@ -264,6 +331,23 @@ fun ConversationItemRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+
+            if (smartInfo?.isAutomated == true) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color(0xFFEFF6FF))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "${smartInfo.brand ?: "System"} • ${smartInfo.messageType ?: "Automated"}",
+                        fontSize = 11.sp,
+                        color = Color(0xFF1D4ED8),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
         }
     }
 }
@@ -275,10 +359,23 @@ fun ConversationDetailView(
     messages: List<SmsMessageItem>,
     isLoading: Boolean,
     newMessageText: String,
+    currentSmartInfo: SmartSmsInfo?,
     onTextChanged: (String) -> Unit,
     onSend: (String) -> Unit,
+    onRescan: () -> Unit,
     onBack: () -> Unit
 ) {
+    var showProfileDialog by remember { mutableStateOf(false) }
+
+    if (showProfileDialog && currentSmartInfo != null) {
+        SenderProfileDialog(
+            smartInfo = currentSmartInfo,
+            recipientAddress = recipientAddress,
+            onRescan = onRescan,
+            onDismiss = { showProfileDialog = false }
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -305,18 +402,72 @@ fun ConversationDetailView(
                 )
             }
             Spacer(modifier = Modifier.width(8.dp))
-            Column {
-                Text(
-                    text = recipientName,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF0F172A)
+
+            if (currentSmartInfo?.isVerified == true && !currentSmartInfo.logoUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = currentSmartInfo.logoUrl,
+                    contentDescription = null,
+                    modifier = Modifier.size(36.dp).clip(CircleShape).background(Color.White)
                 )
-                if (recipientName != recipientAddress) {
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(enabled = currentSmartInfo != null) {
+                        showProfileDialog = true
+                    }
+                    .padding(vertical = 4.dp)
+                    .testTag("sender_header_click")
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = currentSmartInfo?.brand ?: recipientName,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0F172A)
+                    )
+                    if (currentSmartInfo?.isVerified == true) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.Verified,
+                            contentDescription = "Verified",
+                            tint = Color(0xFF16A34A),
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
+                if (recipientName != recipientAddress && recipientAddress.isNotBlank()) {
                     Text(
                         text = recipientAddress,
                         fontSize = 12.sp,
                         color = Color(0xFF64748B)
+                    )
+                }
+            }
+        }
+
+        if (currentSmartInfo?.isAutomated == true) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFFEFF6FF))
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Verified,
+                        contentDescription = null,
+                        tint = Color(0xFF1D4ED8),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Automated SMS: ${currentSmartInfo.brand ?: recipientName} (${currentSmartInfo.messageType})",
+                        fontSize = 12.sp,
+                        color = Color(0xFF1E40AF),
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
             }
@@ -419,6 +570,129 @@ fun ConversationDetailView(
             }
         }
     }
+}
+
+@Composable
+fun SenderProfileDialog(
+    smartInfo: SmartSmsInfo,
+    recipientAddress: String,
+    onRescan: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testTag("close_profile_button")
+            ) {
+                Text("Close", color = Color(0xFF2563EB))
+            }
+        },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (!smartInfo.logoUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = smartInfo.logoUrl,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color.White)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                }
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = smartInfo.brand ?: recipientAddress,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF0F172A)
+                        )
+                        if (smartInfo.isVerified) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.Default.Verified,
+                                contentDescription = "Verified",
+                                tint = Color(0xFF16A34A),
+                                modifier = Modifier.size(16.dp).testTag("verified_check_icon")
+                            )
+                        }
+                    }
+                    Text(
+                        text = if (smartInfo.isVerified) "✓ Verified Sender" else recipientAddress,
+                        fontSize = 12.sp,
+                        color = if (smartInfo.isVerified) Color(0xFF16A34A) else Color(0xFF64748B),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = smartInfo.description ?: "Official automated notification sender.",
+                    fontSize = 14.sp,
+                    color = Color(0xFF334155)
+                )
+                if (smartInfo.messageType != null) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFFEFF6FF))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "Classification: ${smartInfo.messageType}",
+                            fontSize = 12.sp,
+                            color = Color(0xFF1D4ED8),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = Color(0xFFE2E8F0))
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Scanned by Runa AI",
+                            fontSize = 12.sp,
+                            color = Color(0xFF64748B),
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = if (smartInfo.isVerified) "✓ Verified" else "Not Verified",
+                            fontSize = 13.sp,
+                            color = if (smartInfo.isVerified) Color(0xFF16A34A) else Color(0xFFDC2626),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Button(
+                        onClick = onRescan,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.testTag("rescan_button")
+                    ) {
+                        Text("Re-scan", fontSize = 13.sp, color = Color.White)
+                    }
+                }
+            }
+        },
+        shape = RoundedCornerShape(16.dp),
+        containerColor = Color.White
+    )
 }
 
 @Composable

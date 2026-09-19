@@ -1,7 +1,11 @@
 package com.example.data
 
+import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
+import android.net.Uri
+import android.os.Build
+import android.provider.BlockedNumberContract
 import android.provider.CallLog
 import com.example.data.models.CallLogEntry
 import com.example.data.models.CallType
@@ -79,4 +83,56 @@ class CallLogRepository(private val context: Context) {
 
         callLogs
     }
+
+    suspend fun getCallLogsForNumber(number: String): List<CallLogEntry> = withContext(Dispatchers.IO) {
+        val allLogs = getCallLogs(500)
+        allLogs.filter { it.number == number || (it.number.isNotBlank() && number.isNotBlank() && it.number.takeLast(7) == number.takeLast(7)) }
+    }
+
+    suspend fun deleteCallLog(id: Long): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val uri = Uri.withAppendedPath(CallLog.Calls.CONTENT_URI, id.toString())
+            context.contentResolver.delete(uri, null, null) > 0
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    suspend fun isNumberBlocked(number: String): Boolean = withContext(Dispatchers.IO) {
+        if (number.isBlank()) return@withContext false
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                BlockedNumberContract.isBlocked(context, number)
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    suspend fun setNumberBlocked(number: String, block: Boolean): Boolean = withContext(Dispatchers.IO) {
+        if (number.isBlank()) return@withContext false
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                if (block) {
+                    val values = ContentValues().apply {
+                        put(BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER, number)
+                    }
+                    context.contentResolver.insert(BlockedNumberContract.BlockedNumbers.CONTENT_URI, values) != null
+                } else {
+                    context.contentResolver.delete(
+                        BlockedNumberContract.BlockedNumbers.CONTENT_URI,
+                        "${BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER} = ?",
+                        arrayOf(number)
+                    ) > 0
+                }
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
 }
+

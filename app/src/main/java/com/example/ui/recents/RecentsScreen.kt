@@ -22,17 +22,25 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CallMade
 import androidx.compose.material.icons.automirrored.filled.CallReceived
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallMissed
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -41,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -69,6 +78,42 @@ fun RecentsScreen(
 
     LaunchedEffect(Unit) {
         viewModel.checkPermissionAndLoad()
+    }
+
+    // Caller Profile Dialog
+    val selectedEntry = uiState.selectedProfileEntry
+    if (selectedEntry != null) {
+        CallerProfileDialog(
+            entry = selectedEntry,
+            callLogs = uiState.profileCallLogs,
+            isBlocked = uiState.isNumberBlocked,
+            reportMessage = uiState.reportStatusMessage,
+            onCall = {
+                TelecomHelper.placeCall(context, selectedEntry.number)
+            },
+            onSms = {
+                val smsIntent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:${selectedEntry.number}")).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                try {
+                    context.startActivity(smsIntent)
+                } catch (e: Exception) {
+                    // ignore
+                }
+            },
+            onToggleBlock = {
+                viewModel.toggleBlockCurrentNumber()
+            },
+            onReport = {
+                viewModel.reportCurrentNumber()
+            },
+            onDeleteLog = { logId ->
+                viewModel.deleteCallLogEntry(logId)
+            },
+            onDismiss = {
+                viewModel.closeCallerProfile()
+            }
+        )
     }
 
     Column(
@@ -143,7 +188,7 @@ fun RecentsScreen(
                         CallLogRow(
                             entry = logEntry,
                             onClick = {
-                                TelecomHelper.placeCall(context, logEntry.number)
+                                viewModel.openCallerProfile(logEntry)
                             },
                             onCallClick = {
                                 TelecomHelper.placeCall(context, logEntry.number)
@@ -240,5 +285,223 @@ fun CallLogRow(
                 modifier = Modifier.size(20.dp)
             )
         }
+    }
+}
+
+@Composable
+fun CallerProfileDialog(
+    entry: CallLogEntry,
+    callLogs: List<CallLogEntry>,
+    isBlocked: Boolean,
+    reportMessage: String?,
+    onCall: () -> Unit,
+    onSms: () -> Unit,
+    onToggleBlock: () -> Unit,
+    onReport: () -> Unit,
+    onDeleteLog: (Long) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testTag("close_caller_profile")
+            ) {
+                Text("Close", color = Color(0xFF2563EB))
+            }
+        },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ContactAvatar(
+                    photoUri = entry.photoUri,
+                    displayName = entry.cachedName,
+                    initial = entry.initial,
+                    size = 52.dp
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = entry.displayName,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0F172A),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = entry.number,
+                        fontSize = 14.sp,
+                        color = Color(0xFF64748B)
+                    )
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    ProfileActionButton(
+                        icon = Icons.Default.Call,
+                        label = "Call",
+                        color = Color(0xFF2563EB),
+                        onClick = onCall,
+                        testTag = "profile_call_button"
+                    )
+                    ProfileActionButton(
+                        icon = Icons.Default.Chat,
+                        label = "SMS",
+                        color = Color(0xFF10B981),
+                        onClick = onSms,
+                        testTag = "profile_sms_button"
+                    )
+                    ProfileActionButton(
+                        icon = if (isBlocked) Icons.Default.CheckCircle else Icons.Default.Block,
+                        label = if (isBlocked) "Unblock" else "Block",
+                        color = if (isBlocked) Color(0xFF10B981) else Color(0xFFEF4444),
+                        onClick = onToggleBlock,
+                        testTag = "profile_block_button"
+                    )
+                    ProfileActionButton(
+                        icon = Icons.Default.Warning,
+                        label = "Report",
+                        color = Color(0xFFF59E0B),
+                        onClick = onReport,
+                        testTag = "profile_report_button"
+                    )
+                }
+
+                if (!reportMessage.isNullOrBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFFEF3C7))
+                            .padding(8.dp)
+                    ) {
+                        Text(
+                            text = reportMessage,
+                            fontSize = 12.sp,
+                            color = Color(0xFF92400E),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = Color(0xFFE2E8F0))
+
+                Text(
+                    text = "Call History (${callLogs.size})",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0F172A)
+                )
+
+                if (callLogs.isEmpty()) {
+                    Text(
+                        text = "No history available",
+                        fontSize = 12.sp,
+                        color = Color(0xFF94A3B8)
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(callLogs, key = { it.id }) { log ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFFF8FAFC))
+                                    .padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    val dateStr = TelecomHelper.formatCallLogDate(log.timestamp)
+                                    val typeStr = log.type.name.lowercase().replaceFirstChar { it.uppercase() }
+                                    Text(
+                                        text = "$typeStr • $dateStr",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFF1E293B)
+                                    )
+                                    if (log.durationSeconds > 0) {
+                                        Text(
+                                            text = "Duration: ${TelecomHelper.formatDuration(log.durationSeconds)}",
+                                            fontSize = 11.sp,
+                                            color = Color(0xFF64748B)
+                                        )
+                                    }
+                                }
+                                IconButton(
+                                    onClick = { onDeleteLog(log.id) },
+                                    modifier = Modifier.size(32.dp).testTag("delete_log_${log.id}")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Delete entry",
+                                        tint = Color(0xFFEF4444),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        shape = RoundedCornerShape(16.dp),
+        containerColor = Color.White
+    )
+}
+
+@Composable
+fun ProfileActionButton(
+    icon: ImageVector,
+    label: String,
+    color: Color,
+    onClick: () -> Unit,
+    testTag: String
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .padding(4.dp)
+            .testTag(testTag)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(color.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = color,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color(0xFF334155)
+        )
     }
 }

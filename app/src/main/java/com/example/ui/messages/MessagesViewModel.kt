@@ -12,6 +12,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+import com.example.ai.SmartSmsInfo
+import com.example.ai.SmartSmsRecognizer
+
 data class MessagesUiState(
     val hasPermission: Boolean = false,
     val isLoading: Boolean = false,
@@ -20,7 +23,9 @@ data class MessagesUiState(
     val selectedAddress: String? = null,
     val selectedName: String? = null,
     val messages: List<SmsMessageItem> = emptyList(),
-    val newMessageText: String = ""
+    val newMessageText: String = "",
+    val smartInfoMap: Map<String, SmartSmsInfo> = emptyMap(),
+    val currentSmartInfo: SmartSmsInfo? = null
 )
 
 class MessagesViewModel(application: Application) : AndroidViewModel(application) {
@@ -52,21 +57,63 @@ class MessagesViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             val list = smsRepo.getConversations()
-            _uiState.update { it.copy(conversations = list, isLoading = false) }
+            // Analyze each conversation snippet
+            val map = mutableMapOf<String, SmartSmsInfo>()
+            for (conv in list) {
+                val info = SmartSmsRecognizer.analyzeSms(conv.address, conv.snippet)
+                map[conv.address] = info
+            }
+            _uiState.update { it.copy(conversations = list, smartInfoMap = map, isLoading = false) }
         }
     }
 
     fun selectConversation(threadId: Long, address: String, name: String?) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, selectedThreadId = threadId, selectedAddress = address, selectedName = name) }
+            _uiState.update { it.copy(isLoading = true, selectedThreadId = threadId, selectedAddress = address, selectedName = name, currentSmartInfo = null) }
             val msgs = smsRepo.getMessagesForThread(threadId)
-            _uiState.update { it.copy(messages = msgs, isLoading = false) }
+            val info = SmartSmsRecognizer.analyzeSms(address, msgs.lastOrNull()?.body ?: "")
+            _uiState.update { it.copy(messages = msgs, currentSmartInfo = info, isLoading = false) }
+        }
+    }
+
+    fun loadDemoZomatoMessage() {
+        viewModelScope.launch {
+            val sender = "Zomato"
+            val body = "Use 483921 to log in to your Zomato account. Do not share it with anyone."
+            val smartInfo = SmartSmsRecognizer.analyzeSms(sender, body)
+            val demoMsg = SmsMessageItem(
+                id = -999L,
+                threadId = -999L,
+                address = sender,
+                body = body,
+                date = System.currentTimeMillis(),
+                type = 1
+            )
+            _uiState.update {
+                it.copy(
+                    selectedThreadId = -999L,
+                    selectedAddress = sender,
+                    selectedName = "Zomato",
+                    messages = listOf(demoMsg),
+                    currentSmartInfo = smartInfo
+                )
+            }
         }
     }
 
     fun closeConversation() {
-        _uiState.update { it.copy(selectedThreadId = null, selectedAddress = null, selectedName = null, messages = emptyList()) }
+        _uiState.update { it.copy(selectedThreadId = null, selectedAddress = null, selectedName = null, messages = emptyList(), currentSmartInfo = null) }
         loadConversations()
+    }
+
+    fun rescanCurrentConversation() {
+        val address = _uiState.value.selectedAddress ?: return
+        val lastMsgBody = _uiState.value.messages.lastOrNull()?.body ?: ""
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            val info = SmartSmsRecognizer.analyzeSms(address, lastMsgBody)
+            _uiState.update { it.copy(currentSmartInfo = info, isLoading = false) }
+        }
     }
 
     fun updateNewMessageText(text: String) {
